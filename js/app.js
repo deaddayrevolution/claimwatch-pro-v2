@@ -1324,7 +1324,18 @@ portal.load().then(function() {
             app.view.goTo(aoi.geometry);
         }
     };
-    
+    // Global sign-in function
+window.signIn = function() {
+    IdentityManager.getCredential(portal.url).then(function() {
+        return portal.load();
+    }).then(function() {
+        updateUserInfo(portal.user);
+        showMessage("Signed in successfully!", "success");
+    }).catch(function(error) {
+        console.error("Sign-in error:", error);
+        showMessage("Sign-in failed", "error");
+    });
+};
     // Initialize the application
     init();
 });
