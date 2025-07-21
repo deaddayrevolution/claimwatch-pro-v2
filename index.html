@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>ClaimWatch Pro - Mining Claims Monitor</title>
+    
+    <!-- ArcGIS Maps SDK for JavaScript CSS -->
+    <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css">
+    
+    <!-- Portal Authentication Setup -->
+    <script>
+        var dojoConfig = {
+            packages: [{
+                name: "app",
+                location: window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/')) + '/js'
+            }]
+        };
+    </script>
+    
+    <!-- Custom CSS -->
+    <style>
+        html, body, #viewDiv {
+            padding: 0;
+            margin: 0;
+            height: 100%;
+            width: 100%;
+            font-family: Arial, sans-serif;
+        }
+        
+        #header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: #2b7bba;
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 99;
+        }
+        
+        #header h1 {
+            margin: 0;
+            font-size: 24px;
+            flex: 1;
+        }
+        
+        #viewDiv {
+            position: absolute;
+            top: 60px;
+            bottom: 0;
+            left: 0;
+            right: 0;
+        }
+        
+        #sidebar {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            width: 380px;
+            background: white;
+            padding: 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+            border-radius: 4px;
+            max-height: calc(100% - 100px);
+            overflow-y: auto;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #2b7bba;
+        }
+        
+        .stat-card h3 {
+            margin: 0 0 5px 0;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2b7bba;
+        }
+        
+        .section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+        
+        .button {
+            background: #2b7bba;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .button:hover {
+            background: #1e5a8a;
+        }
+        
+        .button.secondary {
+            background: #6c757d;
+        }
+        
+        .button.secondary:hover {
+            background: #545b62;
+        }
+        
+        .button.danger {
+            background: #dc3545;
+        }
+        
+        .button.danger:hover {
+            background: #c82333;
+        }
+        
+        .button.success {
+            background: #28a745;
+        }
+        
+        .button.success:hover {
+            background: #218838;
+        }
+        
+        .filter-button {
+            background: #fff;
+            border: 1px solid #dee2e6;
+            padding: 8px 12px;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            display: inline-block;
+        }
+        
+        .filter-button.active {
+            background: #2b7bba;
+            color: white;
+            border-color: #2b7bba;
+        }
+        
+        .layer-toggle {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .layer-toggle input[type="checkbox"] {
+            margin-right: 10px;
+        }
+        
+        .layer-toggle label {
+            cursor: pointer;
+            flex: 1;
+        }
+        
+        .opacity-slider {
+            width: 100%;
+            margin-top: 5px;
+        }
+        
+        #aoiList {
+            margin-top: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .aoi-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .aoi-item:hover {
+            background: #e9ecef;
+        }
+        
+        .aoi-name {
+            font-weight: bold;
+        }
+        
+        .aoi-stats {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        #messageDiv {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            display: none;
+            z-index: 100;
+            max-width: 400px;
+            text-align: center;
+        }
+        
+        #tools-widget {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        }
+        
+        .sync-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .sync-indicator.online {
+            background: #28a745;
+        }
+        
+        .sync-indicator.offline {
+            background: #dc3545;
+        }
+        
+        .sync-indicator.checking {
+            background: #ffc107;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .data-source {
+            font-size: 11px;
+            color: #666;
+            font-style: italic;
+        }
+        
+        select, input[type="date"] {
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        
+        .change-summary {
+            display: none;
+            margin-top: 15px;
+        }
+        
+        .change-card {
+            background: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            border-left: 4px solid;
+        }
+        
+        .change-card.new {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        
+        .change-card.modified {
+            border-left-color: #ffc107;
+            background: #fff3cd;
+        }
+        
+        .change-card.deleted {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>ClaimWatch Pro - Mining Claims Monitor</h1>
+        <span id="userInfo"></span>
+    </div>
+    
+    <div id="viewDiv"></div>
+    
+    <div id="sidebar">
+        <h2>Dashboard</h2>
+        
+        <!-- Statistics Cards -->
+        <div class="stat-card">
+            <h3>Total Active Claims</h3>
+            <div class="stat-value" id="totalClaims">-</div>
+            <div class="data-source">Hosted Data</div>
+        </div>
+        
+        <div class="stat-card">
+            <h3>Claims in View</h3>
+            <div class="stat-value" id="claimsInView">-</div>
+        </div>
+        
+        <div class="stat-card">
+            <h3>Recent Changes (7 days)</h3>
+            <div class="stat-value" id="recentChanges">-</div>
+        </div>
+        
+        <!-- Layer Controls -->
+        <div class="section">
+            <h3>Data Layers</h3>
+            
+            <div class="layer-toggle">
+                <input type="checkbox" id="hostedLayerToggle" checked>
+                <label for="hostedLayerToggle">
+                    <span class="sync-indicator online" id="hostedIndicator"></span>
+                    My Hosted Claims (Complete Dataset)
+                </label>
+            </div>
+            <input type="range" class="opacity-slider" id="hostedOpacity" min="0" max="100" value="80">
+            
+            <div class="layer-toggle">
+                <input type="checkbox" id="blmActiveToggle">
+                <label for="blmActiveToggle">
+                    <span class="sync-indicator offline" id="blmActiveIndicator"></span>
+                    BLM Active Claims (Live)
+                </label>
+            </div>
+            <input type="range" class="opacity-slider" id="blmActiveOpacity" min="0" max="100" value="60">
+            
+            <div class="layer-toggle">
+                <input type="checkbox" id="blmClosedToggle">
+                <label for="blmClosedToggle">
+                    <span class="sync-indicator offline" id="blmClosedIndicator"></span>
+                    BLM Closed Claims (Live)
+                </label>
+            </div>
+            <input type="range" class="opacity-slider" id="blmClosedOpacity" min="0" max="100" value="40">
+            
+            <div class="layer-toggle">
+                <input type="checkbox" id="changeHistoryToggle">
+                <label for="changeHistoryToggle">
+                    <span class="sync-indicator online" id="changeHistoryIndicator"></span>
+                    Change History
+                </label>
+            </div>
+        </div>
+        
+        <!-- Quick Filters -->
+        <div class="section">
+            <h3>Quick Filters</h3>
+            <button class="filter-button active" data-filter="all">All Claims</button>
+            <button class="filter-button" data-filter="recent">Recent (7 days)</button>
+            <button class="filter-button" data-filter="risk">Payment Risk</button>
+        </div>
+        
+        <!-- AOI Tools -->
+        <div class="section">
+            <h3>Areas of Interest (AOI)</h3>
+            <button class="button" id="drawAOI">Draw New AOI</button>
+            <button class="button secondary" id="clearAOI">Clear Drawing</button>
+            
+            <div id="aoiList">
+                <div class="loading">No AOIs created yet</div>
+            </div>
+        </div>
+        
+        <!-- BLM Change Detection -->
+        <div class="section">
+            <h3>BLM Change Detection</h3>
+            
+            <button class="button danger" id="checkChanges">
+                <span class="sync-indicator offline" id="changeCheckIndicator"></span>
+                Check for Changes Now
+            </button>
+            
+            <div style="margin-top: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Auto-Check Frequency:</label>
+                <select id="autoCheckFrequency">
+                    <option value="manual">Manual Only</option>
+                    <option value="hourly">Every Hour (while app is open)</option>
+                    <option value="daily">Every 24 Hours (while app is open)</option>
+                </select>
+            </div>
+            
+            <div style="margin-top: 10px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Check Since Date:</label>
+                <input type="date" id="checkSinceDate">
+            </div>
+            
+            <div style="margin-top: 10px; font-size: 12px; color: #666;">
+                <div id="lastCheckTime">Last check: Never</div>
+                <div id="nextCheckTime" style="display: none;">Next check: <span></span></div>
+                <div id="serviceStatus">BLM Service: <span class="sync-indicator offline"></span> Unknown</div>
+            </div>
+            
+            <!-- Change Summary -->
+            <div id="changeSummary" class="change-summary">
+                <h4>Latest Changes:</h4>
+                <div class="change-card new">
+                    <h4>New Claims</h4>
+                    <div style="font-size: 20px; font-weight: bold;" id="newClaimsCount">0</div>
+                </div>
+                <div class="change-card modified">
+                    <h4>Modified Claims</h4>
+                    <div style="font-size: 20px; font-weight: bold;" id="modifiedClaimsCount">0</div>
+                </div>
+                <div class="change-card deleted">
+                    <h4>Deleted Claims</h4>
+                    <div style="font-size: 20px; font-weight: bold;" id="deletedClaimsCount">0</div>
+                </div>
+                
+                <button class="button success" id="exportChanges" style="margin-top: 10px;">
+                    Export Change Report
+                </button>
+            </div>
+        </div>
+        
+        <!-- AOI Analysis -->
+        <div class="section">
+            <h3>AOI Analysis</h3>
+            <button class="button secondary" id="analyzeAOIs">Analyze All AOIs</button>
+            <button class="button secondary" id="exportAOIReport">Export AOI Report</button>
+            
+            <div id="aoiAnalysis" style="display: none; margin-top: 15px;">
+                <h4>AOI Summary:</h4>
+                <div id="aoiSummaryResults"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="messageDiv"></div>
+    
+    <div id="tools-widget"></div>
+    
+    <!-- ArcGIS Maps SDK for JavaScript -->
+    <script src="https://js.arcgis.com/4.28/"></script>
+    
+    <!-- ClaimWatch Application -->
+    <script src="js/config.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
