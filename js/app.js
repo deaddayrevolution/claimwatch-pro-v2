@@ -1183,13 +1183,16 @@ portal.load().then(function() {
     }
     
     function updateUserInfo(user) {
-        const userInfoElement = document.getElementById("userInfo");
-        if (user) {
-            userInfoElement.textContent = user.username;
-        } else {
-            userInfoElement.textContent = "Not logged in";
-        }
+    console.log("updateUserInfo called with:", user);
+    const userInfoElement = document.getElementById("userInfo");
+    if (user && user.username) {
+        userInfoElement.textContent = user.username;
+        console.log("Set username to:", user.username);
+    } else {
+        userInfoElement.textContent = "Not logged in";
+        console.log("No user or username found");
     }
+}
     
     function updateServiceStatusIndicator(indicatorId, isOnline) {
         const indicator = document.getElementById(indicatorId);
