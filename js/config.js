@@ -5,7 +5,7 @@
 const CONFIG = {
     // OAuth Configuration
     oauth: {
-        clientId: "YOUR_CLIENT_ID_HERE", // Replace with your OAuth Client ID from Choraquest portal
+        clientId: "Sx3uyUO3z8GO54fn", // Replace with your OAuth Client ID from Choraquest portal
         portal: "https://choraquest.maps.arcgis.com"
     },
     
