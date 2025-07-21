@@ -58,13 +58,29 @@ require([
     });
     
     // Load portal and handle authentication
-    portal.load().then(function() {
-        console.log("Portal loaded:", portal.title || "Choraquest Portal");
+portal.load().then(function() {
+    console.log("Portal loaded:", portal.title || "Choraquest Portal");
+    
+    // Check if user is already signed in
+    if (portal.user) {
         updateUserInfo(portal.user);
-    }).catch(function(error) {
-        console.error("Portal load error:", error);
-        document.getElementById("userInfo").textContent = "Login required";
-    });
+    } else {
+        // Trigger OAuth sign-in
+        IdentityManager.checkSignInStatus(portal.url).then(function() {
+            // User signed in successfully
+            return portal.load();
+        }).then(function() {
+            updateUserInfo(portal.user);
+        }).catch(function(error) {
+            // User not signed in, show sign-in option
+            document.getElementById("userInfo").innerHTML = 
+                '<button onclick="signIn()" style="background:#fff;color:#2b7bba;border:1px solid #2b7bba;padding:5px 10px;border-radius:3px;cursor:pointer;">Sign In</button>';
+        });
+    }
+}).catch(function(error) {
+    console.error("Portal load error:", error);
+    document.getElementById("userInfo").textContent = "Login required";
+});
     
     // Application state management
     const app = {
