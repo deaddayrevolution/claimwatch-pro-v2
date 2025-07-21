@@ -473,6 +473,10 @@ async function updateStatistics() {
         document.getElementById("blmClosedOpacity").addEventListener("input", (e) => {
             app.blmClosedMapLayer.opacity = e.target.value / 100;
         });
+        document.getElementById("hostedLayerToggle").addEventListener("change", (e) => {
+            app.hostedClaimsLayer.visible = e.target.checked;
+            updateStatistics(); // Add this line to update stats when toggled
+        });
         
         // Filter buttons
         document.querySelectorAll(".filter-button").forEach(button => {
