@@ -240,7 +240,7 @@ const CONFIG = {
                     { fieldName: "change_type", label: "Change Type" },
                     { fieldName: "claim_id", label: "Claim ID" },
                     { fieldName: "claim_name", label: "Claim Name" },
-                    { fieldName: "change_date", label: "Change Date", format: { dateFormat: "short-date-time" } },
+                   { fieldName: "change_date", label: "Change Date", format: { dateFormat: "short-date-short-time" } },
                     { fieldName: "state", label: "State" },
                     { fieldName: "county", label: "County" },
                     { fieldName: "acres", label: "Acres", format: { places: 2 } },
