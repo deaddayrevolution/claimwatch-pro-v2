@@ -228,7 +228,7 @@ const CONFIG = {
                     { fieldName: "created_date", label: "Created", format: { dateFormat: "short-date" } },
                     { fieldName: "total_claims", label: "Total Claims" },
                     { fieldName: "recent_changes", label: "Recent Changes" },
-                    { fieldName: "last_analysis", label: "Last Analysis", format: { dateFormat: "short-date-time" } }
+                    { fieldName: "last_analysis", label: "Last Analysis", format: { dateFormat: "short-date-short-time" } }
                 ]
             }]
         },
