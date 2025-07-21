@@ -173,14 +173,41 @@ portal.load().then(function() {
             extent: new Extent(CONFIG.map.extent)
         });
         
-        // Update statistics when view changes
-        reactiveUtils.when(
-            () => app.view.stationary,
-            () => {
-                updateStatisticsInView();
-            }
-        );
+        // Update statistics
+async function updateStatistics() {
+    try {
+        // Only count if hosted layer is visible
+        if (!app.hostedClaimsLayer || !app.hostedClaimsLayer.loaded || !app.hostedClaimsLayer.visible) {
+            // Layer not visible, show zero
+            document.getElementById("totalClaims").textContent = "0";
+            document.getElementById("recentChanges").textContent = "0";
+            document.getElementById("claimsInView").textContent = "0";
+            return;
+        }
+        
+        // Total claims
+        const totalQuery = app.hostedClaimsLayer.createQuery();
+        totalQuery.where = "1=1";
+        const totalCount = await app.hostedClaimsLayer.queryFeatureCount(totalQuery);
+        app.statistics.total = totalCount;
+        document.getElementById("totalClaims").textContent = totalCount.toLocaleString();
+        
+        // Recent changes
+        const today = new Date();
+        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const recentQuery = app.hostedClaimsLayer.createQuery();
+        recentQuery.where = `Modified >= '${weekAgo.toISOString().split('T')[0]}'`;
+        const recentCount = await app.hostedClaimsLayer.queryFeatureCount(recentQuery);
+        app.statistics.recent = recentCount;
+        document.getElementById("recentChanges").textContent = recentCount.toLocaleString();
+        
+        // Update view statistics
+        updateStatisticsInView();
+        
+    } catch (error) {
+        console.error("Error updating statistics:", error);
     }
+}
     
     // Set up all layers with proper ordering and configuration
     async function setupLayers() {
