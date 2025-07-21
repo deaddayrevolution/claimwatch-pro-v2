@@ -60,21 +60,22 @@ require([
     // Load portal and handle authentication
 portal.load().then(function() {
     console.log("Portal loaded:", portal.title || "Choraquest Portal");
+    console.log("Portal user:", portal.user);
     
-    // Check if user is already signed in
-    if (portal.user) {
-        updateUserInfo(portal.user);
+    // Check if we can access portal data (which means we're authenticated)
+    if (portal.user || portal.credential) {
+        // We're authenticated, update display
+        const username = portal.user ? portal.user.username : "Authenticated User";
+        document.getElementById("userInfo").textContent = username;
     } else {
-        // Trigger OAuth sign-in
-        IdentityManager.checkSignInStatus(portal.url).then(function() {
-            // User signed in successfully
-            return portal.load();
-        }).then(function() {
-            updateUserInfo(portal.user);
-        }).catch(function(error) {
-            // User not signed in, show sign-in option
-            document.getElementById("userInfo").innerHTML = 
-                '<button onclick="signIn()" style="background:#fff;color:#2b7bba;border:1px solid #2b7bba;padding:5px 10px;border-radius:3px;cursor:pointer;">Sign In</button>';
+        // Try to get current user
+        IdentityManager.findCredential(portal.url).then(function(credential) {
+            if (credential) {
+                document.getElementById("userInfo").textContent = credential.userId || "Signed In";
+            } else {
+                document.getElementById("userInfo").innerHTML = 
+                    '<button onclick="signIn()" style="background:#fff;color:#2b7bba;border:1px solid #2b7bba;padding:5px 10px;border-radius:3px;cursor:pointer;">Sign In</button>';
+            }
         });
     }
 }).catch(function(error) {
