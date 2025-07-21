@@ -1326,11 +1326,24 @@ portal.load().then(function() {
     };
     // Global sign-in function
     window.signIn = function() {
-        IdentityManager.getCredential(portal.url).then(function() {
+        IdentityManager.getCredential(portal.url).then(function(credential) {
+            // Force reload the portal with new credentials
+            portal.user = null; // Clear cached user
             return portal.load();
         }).then(function() {
-            updateUserInfo(portal.user);
-            showMessage("Signed in successfully!", "success");
+            console.log("Portal reloaded, user:", portal.user);
+            if (portal.user) {
+                updateUserInfo(portal.user);
+                showMessage("Signed in as " + portal.user.username, "success");
+            } else {
+                // Try one more time to get user info
+                setTimeout(() => {
+                    portal.load().then(() => {
+                        console.log("Second attempt, user:", portal.user);
+                        updateUserInfo(portal.user);
+                    });
+                }, 1000);
+            }
         }).catch(function(error) {
             console.error("Sign-in error:", error);
             showMessage("Sign-in failed", "error");
