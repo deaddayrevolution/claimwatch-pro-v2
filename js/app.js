@@ -58,30 +58,30 @@ require([
     });
     
     // Load portal and handle authentication
-portal.load().then(function() {
-    console.log("Portal loaded:", portal.title || "Choraquest Portal");
-    console.log("Portal user:", portal.user);
-    
-    // Check if we can access portal data (which means we're authenticated)
-    if (portal.user || portal.credential) {
-        // We're authenticated, update display
-        const username = portal.user ? portal.user.username : "Authenticated User";
-        document.getElementById("userInfo").textContent = username;
-    } else {
-        // Try to get current user
-        IdentityManager.findCredential(portal.url).then(function(credential) {
-            if (credential) {
-                document.getElementById("userInfo").textContent = credential.userId || "Signed In";
-            } else {
-                document.getElementById("userInfo").innerHTML = 
-                    '<button onclick="signIn()" style="background:#fff;color:#2b7bba;border:1px solid #2b7bba;padding:5px 10px;border-radius:3px;cursor:pointer;">Sign In</button>';
-            }
-        });
-    }
-}).catch(function(error) {
-    console.error("Portal load error:", error);
-    document.getElementById("userInfo").textContent = "Login required";
-});
+    portal.load().then(function() {
+        console.log("Portal loaded:", portal.title || "Choraquest Portal");
+        console.log("Portal user:", portal.user);
+        
+        // Check if we can access portal data (which means we're authenticated)
+        if (portal.user || portal.credential) {
+            // We're authenticated, update display
+            const username = portal.user ? portal.user.username : "Authenticated User";
+            document.getElementById("userInfo").textContent = username;
+        } else {
+            // Try to get current user
+            IdentityManager.findCredential(portal.url).then(function(credential) {
+                if (credential) {
+                    document.getElementById("userInfo").textContent = credential.userId || "Signed In";
+                } else {
+                    document.getElementById("userInfo").innerHTML = 
+                        '<button onclick="signIn()" style="background:#fff;color:#2b7bba;border:1px solid #2b7bba;padding:5px 10px;border-radius:3px;cursor:pointer;">Sign In</button>';
+                }
+            });
+        }
+    }).catch(function(error) {
+        console.error("Portal load error:", error);
+        document.getElementById("userInfo").textContent = "Login required";
+    });
     
     // Application state management
     const app = {
@@ -173,41 +173,14 @@ portal.load().then(function() {
             extent: new Extent(CONFIG.map.extent)
         });
         
-        // Update statistics
-async function updateStatistics() {
-    try {
-        // Only count if hosted layer is visible
-        if (!app.hostedClaimsLayer || !app.hostedClaimsLayer.loaded || !app.hostedClaimsLayer.visible) {
-            // Layer not visible, show zero
-            document.getElementById("totalClaims").textContent = "0";
-            document.getElementById("recentChanges").textContent = "0";
-            document.getElementById("claimsInView").textContent = "0";
-            return;
-        }
-        
-        // Total claims
-        const totalQuery = app.hostedClaimsLayer.createQuery();
-        totalQuery.where = "1=1";
-        const totalCount = await app.hostedClaimsLayer.queryFeatureCount(totalQuery);
-        app.statistics.total = totalCount;
-        document.getElementById("totalClaims").textContent = totalCount.toLocaleString();
-        
-        // Recent changes
-        const today = new Date();
-        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const recentQuery = app.hostedClaimsLayer.createQuery();
-        recentQuery.where = `Modified >= '${weekAgo.toISOString().split('T')[0]}'`;
-        const recentCount = await app.hostedClaimsLayer.queryFeatureCount(recentQuery);
-        app.statistics.recent = recentCount;
-        document.getElementById("recentChanges").textContent = recentCount.toLocaleString();
-        
-        // Update view statistics
-        updateStatisticsInView();
-        
-    } catch (error) {
-        console.error("Error updating statistics:", error);
+        // Update statistics when view changes
+        reactiveUtils.when(
+            () => app.view.stationary,
+            () => {
+                updateStatisticsInView();
+            }
+        );
     }
-}
     
     // Set up all layers with proper ordering and configuration
     async function setupLayers() {
@@ -447,6 +420,7 @@ async function updateStatistics() {
         // Layer toggles
         document.getElementById("hostedLayerToggle").addEventListener("change", (e) => {
             app.hostedClaimsLayer.visible = e.target.checked;
+            updateStatistics(); // Update stats when toggled
         });
         
         document.getElementById("blmActiveToggle").addEventListener("change", (e) => {
@@ -472,10 +446,6 @@ async function updateStatistics() {
         
         document.getElementById("blmClosedOpacity").addEventListener("input", (e) => {
             app.blmClosedMapLayer.opacity = e.target.value / 100;
-        });
-        document.getElementById("hostedLayerToggle").addEventListener("change", (e) => {
-            app.hostedClaimsLayer.visible = e.target.checked;
-            updateStatistics(); // Add this line to update stats when toggled
         });
         
         // Filter buttons
@@ -549,6 +519,64 @@ async function updateStatistics() {
         };
         
         updateStatistics();
+    }
+    
+    // Update statistics
+    async function updateStatistics() {
+        try {
+            // Only count if hosted layer is visible
+            if (!app.hostedClaimsLayer || !app.hostedClaimsLayer.loaded || !app.hostedClaimsLayer.visible) {
+                // Layer not visible, show zero
+                document.getElementById("totalClaims").textContent = "0";
+                document.getElementById("recentChanges").textContent = "0";
+                document.getElementById("claimsInView").textContent = "0";
+                return;
+            }
+            
+            // Total claims
+            const totalQuery = app.hostedClaimsLayer.createQuery();
+            totalQuery.where = "1=1";
+            const totalCount = await app.hostedClaimsLayer.queryFeatureCount(totalQuery);
+            app.statistics.total = totalCount;
+            document.getElementById("totalClaims").textContent = totalCount.toLocaleString();
+            
+            // Recent changes
+            const today = new Date();
+            const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+            const recentQuery = app.hostedClaimsLayer.createQuery();
+            recentQuery.where = `Modified >= '${weekAgo.toISOString().split('T')[0]}'`;
+            const recentCount = await app.hostedClaimsLayer.queryFeatureCount(recentQuery);
+            app.statistics.recent = recentCount;
+            document.getElementById("recentChanges").textContent = recentCount.toLocaleString();
+            
+            // Update view statistics
+            updateStatisticsInView();
+            
+        } catch (error) {
+            console.error("Error updating statistics:", error);
+        }
+    }
+    
+    // Update statistics for current view
+    async function updateStatisticsInView() {
+        if (!app.view.stationary) return;
+        
+        try {
+            const viewQuery = app.hostedClaimsLayer.createQuery();
+            viewQuery.geometry = app.view.extent;
+            viewQuery.spatialRelationship = "intersects";
+            
+            if (app.currentFilter !== "all") {
+                viewQuery.where = app.hostedClaimsLayer.definitionExpression;
+            }
+            
+            const viewCount = await app.hostedClaimsLayer.queryFeatureCount(viewQuery);
+            app.statistics.inView = viewCount;
+            document.getElementById("claimsInView").textContent = viewCount.toLocaleString();
+            
+        } catch (error) {
+            console.error("Error updating view statistics:", error);
+        }
     }
     
     // Main change detection function with Extract Changes
@@ -1102,59 +1130,6 @@ async function updateStatistics() {
         showMessage("AOI analysis completed", "success");
     }
     
-    // Update statistics
-    async function updateStatistics() {
-        try {
-            if (!app.hostedClaimsLayer || !app.hostedClaimsLayer.loaded) {
-                return;
-            }
-            
-            // Total claims
-            const totalQuery = app.hostedClaimsLayer.createQuery();
-            totalQuery.where = "1=1";
-            const totalCount = await app.hostedClaimsLayer.queryFeatureCount(totalQuery);
-            app.statistics.total = totalCount;
-            document.getElementById("totalClaims").textContent = totalCount.toLocaleString();
-            
-            // Recent changes
-            const today = new Date();
-            const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-            const recentQuery = app.hostedClaimsLayer.createQuery();
-            recentQuery.where = `Modified >= '${weekAgo.toISOString().split('T')[0]}'`;
-            const recentCount = await app.hostedClaimsLayer.queryFeatureCount(recentQuery);
-            app.statistics.recent = recentCount;
-            document.getElementById("recentChanges").textContent = recentCount.toLocaleString();
-            
-            // Update view statistics
-            updateStatisticsInView();
-            
-        } catch (error) {
-            console.error("Error updating statistics:", error);
-        }
-    }
-    
-    // Update statistics for current view
-    async function updateStatisticsInView() {
-        if (!app.view.stationary) return;
-        
-        try {
-            const viewQuery = app.hostedClaimsLayer.createQuery();
-            viewQuery.geometry = app.view.extent;
-            viewQuery.spatialRelationship = "intersects";
-            
-            if (app.currentFilter !== "all") {
-                viewQuery.where = app.hostedClaimsLayer.definitionExpression;
-            }
-            
-            const viewCount = await app.hostedClaimsLayer.queryFeatureCount(viewQuery);
-            app.statistics.inView = viewCount;
-            document.getElementById("claimsInView").textContent = viewCount.toLocaleString();
-            
-        } catch (error) {
-            console.error("Error updating view statistics:", error);
-        }
-    }
-    
     // Check BLM service status
     async function checkBLMServiceStatus() {
         const status = { available: false, error: null };
@@ -1215,16 +1190,16 @@ async function updateStatistics() {
     }
     
     function updateUserInfo(user) {
-    console.log("updateUserInfo called with:", user);
-    const userInfoElement = document.getElementById("userInfo");
-    if (user && user.username) {
-        userInfoElement.textContent = user.username;
-        console.log("Set username to:", user.username);
-    } else {
-        userInfoElement.textContent = "Not logged in";
-        console.log("No user or username found");
+        console.log("updateUserInfo called with:", user);
+        const userInfoElement = document.getElementById("userInfo");
+        if (user && user.username) {
+            userInfoElement.textContent = user.username;
+            console.log("Set username to:", user.username);
+        } else {
+            userInfoElement.textContent = "Not logged in";
+            console.log("No user or username found");
+        }
     }
-}
     
     function updateServiceStatusIndicator(indicatorId, isOnline) {
         const indicator = document.getElementById(indicatorId);
@@ -1359,6 +1334,7 @@ async function updateStatistics() {
             app.view.goTo(aoi.geometry);
         }
     };
+    
     // Global sign-in function
     window.signIn = function() {
         IdentityManager.getCredential(portal.url).then(function(credential) {
@@ -1384,6 +1360,7 @@ async function updateStatistics() {
             showMessage("Sign-in failed", "error");
         });
     };
+    
     // Initialize the application
     init();
 });
