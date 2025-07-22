@@ -1,5 +1,6 @@
 /**
  * ClaimWatch Pro - Complete Application with BLM Integration
+ * UPDATED VERSION with Change Detection Fixes
  * Implements MapServer/FeatureServer hybrid approach for optimal performance
  */
 
@@ -116,7 +117,7 @@ require([
             recent: 0
         },
         
-        // Change detection state
+        // Change detection state - FIXED
         changeDetection: {
             isRunning: false,
             lastResults: null,
@@ -148,8 +149,8 @@ require([
             setInterval(updateStatistics, CONFIG.refresh.statistics);
             setInterval(checkServiceStatus, CONFIG.refresh.serviceStatus);
             
-            // Initialize date picker
-            initializeDatePicker();
+            // Initialize change detection - FIXED
+            initializeChangeDetection();
             
             showMessage("ClaimWatch Pro loaded successfully", "success");
             
@@ -202,186 +203,129 @@ require([
         }
     }
     
-    // Setup BLM MapImageLayers for fast visualization of all claims
+    // Set up BLM Map Layers for fast visualization
     async function setupBLMMapLayers() {
-        // BLM Closed Claims MapServer
-        app.blmClosedMapLayer = new MapImageLayer({
-            url: CONFIG.blmServices.closedMap,
-            title: "BLM Closed Claims (Live - All Data)",
-            visible: false,
-            opacity: 0.4,
-            sublayers: [{
-                id: 0,
-                renderer: {
-                    type: "simple",
-                    symbol: CONFIG.symbols.blmClosed
-                }
-            }]
-        });
-        
-        // BLM Active Claims MapServer
-        app.blmActiveMapLayer = new MapImageLayer({
-            url: CONFIG.blmServices.notClosedMap,
-            title: "BLM Active Claims (Live - All Data)", 
-            visible: false,
-            opacity: 0.6,
-            sublayers: [{
-                id: 0,
-                renderer: {
-                    type: "simple",
-                    symbol: CONFIG.symbols.blmActive
-                }
-            }]
-        });
-        
-        // Add to map (bottom layers)
-        app.view.map.add(app.blmClosedMapLayer);
-        app.view.map.add(app.blmActiveMapLayer);
-        
-        console.log("BLM Map layers added");
+        try {
+            // BLM Active Claims Map Layer
+            app.blmActiveMapLayer = new MapImageLayer({
+                url: CONFIG.blmServices.notClosedMap,
+                title: "BLM Active Claims (Live)",
+                opacity: 0.7,
+                visible: true
+            });
+            
+            // BLM Closed Claims Map Layer  
+            app.blmClosedMapLayer = new MapImageLayer({
+                url: CONFIG.blmServices.closedMap,
+                title: "BLM Closed Claims (Live)",
+                opacity: 0.5,
+                visible: false
+            });
+            
+            app.view.map.addMany([app.blmActiveMapLayer, app.blmClosedMapLayer]);
+            console.log("BLM Map layers added");
+            
+        } catch (error) {
+            console.error("Error setting up BLM map layers:", error);
+            throw error;
+        }
     }
     
-    // Setup your hosted feature layers (complete datasets)
+    // Set up hosted feature layers
     async function setupHostedLayers() {
-        // Your hosted active claims layer
-        app.hostedClaimsLayer = new FeatureLayer({
-            url: CONFIG.layers.notClosedClaims.url,
-            title: CONFIG.layers.notClosedClaims.title,
-            outFields: ["*"],
-            popupTemplate: CONFIG.popupTemplates.claims,
-            renderer: {
-                type: "simple",
-                symbol: CONFIG.symbols.hostedDefault
-            },
-            opacity: 0.8
-        });
-        
-        // Your hosted closed claims layer
-        app.hostedClosedClaimsLayer = new FeatureLayer({
-            url: CONFIG.layers.closedClaims.url,
-            title: CONFIG.layers.closedClaims.title,
-            outFields: ["*"],
-            visible: false,
-            popupTemplate: CONFIG.popupTemplates.claims,
-            renderer: {
-                type: "simple",
-                symbol: {
-                    type: "simple-fill",
-                    color: [128, 128, 128, 0.5],
-                    outline: {
-                        color: [64, 64, 64, 1],
-                        width: 1
+        try {
+            // Your hosted claims layer (complete dataset)
+            app.hostedClaimsLayer = new FeatureLayer({
+                url: CONFIG.hostedServices.claims.url,
+                title: "My Hosted Claims (Complete Dataset)",
+                visible: true,
+                opacity: 0.8,
+                renderer: {
+                    type: "simple",
+                    symbol: {
+                        type: "simple-fill",
+                        color: [255, 255, 0, 0.6],
+                        outline: {
+                            color: [255, 255, 0, 0.8],
+                            width: 2
+                        }
                     }
+                },
+                popupTemplate: {
+                    title: "Mining Claim: {CSE_NAME}",
+                    content: [
+                        {
+                            type: "fields",
+                            fieldInfos: [
+                                { fieldName: "CSE_NR", label: "Case Number" },
+                                { fieldName: "CSE_DISP", label: "Disposition" },
+                                { fieldName: "RCRD_ACRS", label: "Acres" },
+                                { fieldName: "Created", label: "Created" },
+                                { fieldName: "Modified", label: "Modified" }
+                            ]
+                        }
+                    ]
                 }
-            },
-            opacity: 0.6
-        });
-        
-        // AOI feature layer
-        app.aoiFeatureLayer = new FeatureLayer({
-            url: CONFIG.layers.aois.url,
-            title: CONFIG.layers.aois.title,
-            outFields: ["*"],
-            renderer: {
-                type: "simple",
-                symbol: CONFIG.symbols.aoi
-            },
-            popupTemplate: CONFIG.popupTemplates.aoi
-        });
-        
-        // Change history layer
-        app.changeHistoryLayer = new FeatureLayer({
-            url: CONFIG.layers.changeHistory.url,
-            title: CONFIG.layers.changeHistory.title,
-            outFields: ["*"],
-            visible: false,
-            renderer: {
-                type: "unique-value",
-                field: "change_type",
-                uniqueValueInfos: [
-                    {
-                        value: "new",
-                        symbol: CONFIG.symbols.changeNew
-                    },
-                    {
-                        value: "modified", 
-                        symbol: CONFIG.symbols.changeModified
-                    },
-                    {
-                        value: "deleted",
-                        symbol: CONFIG.symbols.changeDeleted
-                    }
-                ]
-            },
-            popupTemplate: CONFIG.popupTemplates.changeHistory
-        });
-        
-        // Add to map
-        app.view.map.add(app.hostedClosedClaimsLayer);
-        app.view.map.add(app.hostedClaimsLayer);
-        app.view.map.add(app.aoiFeatureLayer);
-        app.view.map.add(app.changeHistoryLayer);
-        
-        // Wait for layers to load
-        await Promise.all([
-            app.hostedClaimsLayer.load(),
-            app.hostedClosedClaimsLayer.load(),
-            app.aoiFeatureLayer.load(),
-            app.changeHistoryLayer.load()
-        ]);
-        
-        console.log("Hosted layers loaded");
+            });
+            
+            // Change history layer
+            app.changeHistoryLayer = new FeatureLayer({
+                url: CONFIG.hostedServices.changeHistory.url,
+                title: "Change History",
+                visible: false
+            });
+            
+            app.view.map.addMany([app.hostedClaimsLayer, app.changeHistoryLayer]);
+            console.log("Hosted layers added");
+            
+        } catch (error) {
+            console.error("Error setting up hosted layers:", error);
+            throw error;
+        }
     }
     
-    // Setup interactive layers (AOI drawing, etc.)
+    // Set up interactive layers (AOIs, graphics)
     async function setupInteractiveLayers() {
-        // AOI drawing layer
-        app.aoiDrawingLayer = new GraphicsLayer({
-            title: "AOI Drawing",
-            listMode: "hide"
-        });
-        
-        app.view.map.add(app.aoiDrawingLayer);
+        try {
+            // AOI drawing layer
+            app.aoiDrawingLayer = new GraphicsLayer({
+                title: "AOI Drawing Layer"
+            });
+            
+            app.view.map.add(app.aoiDrawingLayer);
+            
+            // Set up sketch widget for AOI drawing
+            app.sketch = new Sketch({
+                layer: app.aoiDrawingLayer,
+                view: app.view,
+                creationMode: "update"
+            });
+            
+            console.log("Interactive layers added");
+            
+        } catch (error) {
+            console.error("Error setting up interactive layers:", error);
+            throw error;
+        }
     }
     
-    // Set up widgets (search, layer list, etc.)
+    // Set up widgets
     function setupWidgets() {
         // Search widget
-        const search = new Search({
-            view: app.view,
-            includeDefaultSources: false,
-            sources: [{
-                layer: app.hostedClaimsLayer,
-                searchFields: ["CSE_NR", "CSE_NAME"],
-                displayField: "CSE_NAME",
-                exactMatch: false,
-                placeholder: "Search by claim ID or name",
-                name: "Mining Claims"
-            }]
+        const searchWidget = new Search({
+            view: app.view
         });
-        
-        app.view.ui.add(search, "top-left");
+        app.view.ui.add(searchWidget, "top-right");
         
         // Layer list
         const layerList = new LayerList({
-            view: app.view,
-            listItemCreatedFunction: function(event) {
-                const item = event.item;
-                if (item.layer.type === "feature" || item.layer.type === "map-image") {
-                    item.panel = {
-                        content: "legend",
-                        open: false
-                    };
-                }
-            }
+            view: app.view
         });
         
         const layerListExpand = new Expand({
             view: app.view,
-            content: layerList,
-            expandIconClass: "esri-icon-layers"
+            content: layerList
         });
-        
         app.view.ui.add(layerListExpand, "top-left");
         
         // Legend
@@ -391,197 +335,247 @@ require([
         
         const legendExpand = new Expand({
             view: app.view,
-            content: legend,
-            expandIconClass: "esri-icon-legend"
+            content: legend
         });
-        
-        app.view.ui.add(legendExpand, "top-left");
-        
-        // Sketch widget for AOI drawing
-        app.sketch = new Sketch({
-            layer: app.aoiDrawingLayer,
-            view: app.view,
-            creationMode: "single",
-            availableCreateTools: ["polygon", "rectangle"],
-            updateOnGraphicClick: false,
-            container: document.createElement("div")
-        });
-        
-        // Add sketch widget to tools div
-        const toolsDiv = document.getElementById("tools-widget");
-        if (toolsDiv) {
-            toolsDiv.appendChild(app.sketch.container);
-            app.sketch.visible = false;
-        }
+        app.view.ui.add(legendExpand, "bottom-left");
     }
     
-    // Set up all event handlers
+    // Set up event handlers - FIXED
     function setupEventHandlers() {
-        // Layer toggles
-        document.getElementById("hostedLayerToggle").addEventListener("change", (e) => {
+        // Layer visibility controls
+        document.getElementById("hostedClaimsToggle").addEventListener("change", function(e) {
             app.hostedClaimsLayer.visible = e.target.checked;
-            updateStatistics(); // Update stats when toggled
         });
         
-        document.getElementById("blmActiveToggle").addEventListener("change", (e) => {
+        document.getElementById("blmActiveToggle").addEventListener("change", function(e) {
             app.blmActiveMapLayer.visible = e.target.checked;
         });
         
-        document.getElementById("blmClosedToggle").addEventListener("change", (e) => {
+        document.getElementById("blmClosedToggle").addEventListener("change", function(e) {
             app.blmClosedMapLayer.visible = e.target.checked;
         });
         
-        document.getElementById("changeHistoryToggle").addEventListener("change", (e) => {
+        document.getElementById("changeHistoryToggle").addEventListener("change", function(e) {
             app.changeHistoryLayer.visible = e.target.checked;
         });
         
-        // Opacity sliders
-        document.getElementById("hostedOpacity").addEventListener("input", (e) => {
+        // Layer opacity controls
+        document.getElementById("hostedOpacity").addEventListener("input", function(e) {
             app.hostedClaimsLayer.opacity = e.target.value / 100;
         });
         
-        document.getElementById("blmActiveOpacity").addEventListener("input", (e) => {
+        document.getElementById("blmActiveOpacity").addEventListener("input", function(e) {
             app.blmActiveMapLayer.opacity = e.target.value / 100;
         });
         
-        document.getElementById("blmClosedOpacity").addEventListener("input", (e) => {
+        document.getElementById("blmClosedOpacity").addEventListener("input", function(e) {
             app.blmClosedMapLayer.opacity = e.target.value / 100;
         });
         
         // Filter buttons
-        document.querySelectorAll(".filter-button").forEach(button => {
-            button.addEventListener("click", (e) => {
-                applyFilter(e.target.dataset.filter);
-                
-                // Update active state
-                document.querySelectorAll(".filter-button").forEach(b => b.classList.remove("active"));
-                e.target.classList.add("active");
+        document.getElementById("filterAll").addEventListener("click", function() {
+            setFilter("all");
+        });
+        
+        document.getElementById("filterRecent").addEventListener("click", function() {
+            setFilter("recent");
+        });
+        
+        document.getElementById("filterPaymentRisk").addEventListener("click", function() {
+            setFilter("paymentRisk");
+        });
+        
+        // AOI controls
+        document.getElementById("drawAOI").addEventListener("click", function() {
+            startAOIDrawing();
+        });
+        
+        document.getElementById("clearDrawing").addEventListener("click", function() {
+            clearAOIDrawing();
+        });
+        
+        // Change detection controls - FIXED EVENT HANDLERS
+        const checkButton = document.getElementById("checkChanges");
+        if (checkButton) {
+            checkButton.addEventListener("click", function(e) {
+                e.preventDefault();
+                checkForChanges();
             });
-        });
+        }
         
-        // AOI tools
-        document.getElementById("drawAOI").addEventListener("click", () => {
-            app.sketch.visible = true;
-            app.sketch.create("polygon");
-            showMessage("Click on the map to draw your area of interest", "info");
-        });
-        
-        document.getElementById("clearAOI").addEventListener("click", () => {
-            app.sketch.cancel();
-            app.sketch.visible = false;
-            app.aoiDrawingLayer.removeAll();
-        });
-        
-        // Sketch events
-        app.sketch.on("create", (event) => {
-            if (event.state === "complete") {
-                createAOI(event.graphic);
-                app.sketch.visible = false;
-            }
-        });
-        
-        // Change detection
-        document.getElementById("checkChanges").addEventListener("click", checkForChanges);
-        document.getElementById("autoCheckFrequency").addEventListener("change", (e) => {
+        // Auto-check frequency
+        document.getElementById("autoCheckFrequency").addEventListener("change", function(e) {
             setupAutoCheck(e.target.value);
         });
-        document.getElementById("exportChanges").addEventListener("click", exportChangeReport);
         
-        // AOI Analysis
-        document.getElementById("analyzeAOIs").addEventListener("click", analyzeAllAOIs);
-        document.getElementById("exportAOIReport").addEventListener("click", exportAOIReport);
-    }
-    
-    // Apply filter to hosted claims layer
-    function applyFilter(filterType) {
-        app.currentFilter = filterType;
-        let where = "1=1";
-        let symbol = CONFIG.symbols.hostedDefault;
+        // AOI analysis controls
+        document.getElementById("analyzeAOIs").addEventListener("click", function(e) {
+            e.preventDefault();
+            analyzeAllAOIs();
+        });
         
-        const today = new Date();
-        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        document.getElementById("exportAOIReport").addEventListener("click", function(e) {
+            e.preventDefault();
+            exportAOIReport();
+        });
         
-        switch(filterType) {
-            case "recent":
-                where = `Modified >= '${weekAgo.toISOString().split('T')[0]}'`;
-                symbol = CONFIG.symbols.hostedRecent;
-                break;
-            case "risk":
-                where = `Modified < '${CONFIG.riskCriteria.paymentRiskDate}' AND CSE_DISP = 'Active'`;
-                symbol = CONFIG.symbols.hostedRisk;
-                break;
-        }
-        
-        app.hostedClaimsLayer.definitionExpression = where;
-        app.hostedClaimsLayer.renderer = {
-            type: "simple",
-            symbol: symbol
-        };
-        
-        updateStatistics();
-    }
-    
-    // Update statistics
-    async function updateStatistics() {
-        try {
-            // Only count if hosted layer is visible
-            if (!app.hostedClaimsLayer || !app.hostedClaimsLayer.loaded || !app.hostedClaimsLayer.visible) {
-                // Layer not visible, show zero
-                document.getElementById("totalClaims").textContent = "0";
-                document.getElementById("recentChanges").textContent = "0";
-                document.getElementById("claimsInView").textContent = "0";
-                return;
+        // Sketch event handlers
+        app.sketch.on("create", function(event) {
+            if (event.state === "complete") {
+                addAOI(event.graphic);
             }
-            
-            // Total claims
-            const totalQuery = app.hostedClaimsLayer.createQuery();
-            totalQuery.where = "1=1";
-            const totalCount = await app.hostedClaimsLayer.queryFeatureCount(totalQuery);
-            app.statistics.total = totalCount;
-            document.getElementById("totalClaims").textContent = totalCount.toLocaleString();
-            
-            // Recent changes
-            const today = new Date();
-            const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-            const recentQuery = app.hostedClaimsLayer.createQuery();
-            recentQuery.where = `Modified >= '${weekAgo.toISOString().split('T')[0]}'`;
-            const recentCount = await app.hostedClaimsLayer.queryFeatureCount(recentQuery);
-            app.statistics.recent = recentCount;
-            document.getElementById("recentChanges").textContent = recentCount.toLocaleString();
-            
-            // Update view statistics
-            updateStatisticsInView();
-            
-        } catch (error) {
-            console.error("Error updating statistics:", error);
-        }
+        });
+        
+        app.sketch.on("update", function(event) {
+            if (event.state === "complete") {
+                updateAOI(event.graphics[0]);
+            }
+        });
     }
     
-    // Update statistics for current view
-    async function updateStatisticsInView() {
-        if (!app.view.stationary) return;
+    // FIXED: Service status check function
+    async function checkBLMServiceStatus() {
+        const status = { available: false, error: null };
         
         try {
-            const viewQuery = app.hostedClaimsLayer.createQuery();
-            viewQuery.geometry = app.view.extent;
-            viewQuery.spatialRelationship = "intersects";
+            // Use the correct BLM service URL from CONFIG
+            const response = await fetch(CONFIG.blmServices.notClosedFeatures + "?f=json", {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                }
+            });
             
-            if (app.currentFilter !== "all") {
-                viewQuery.where = app.hostedClaimsLayer.definitionExpression;
+            if (response.ok) {
+                const data = await response.json();
+                // Check if the response has the expected structure
+                if (data && data.name && !data.error) {
+                    status.available = true;
+                    console.log("BLM Service Available:", data.name);
+                    updateServiceStatusIndicator("blmActiveIndicator", true);
+                } else {
+                    status.error = data.error ? data.error.message : "Invalid service response";
+                    updateServiceStatusIndicator("blmActiveIndicator", false);
+                }
+            } else {
+                status.error = `HTTP ${response.status}: ${response.statusText}`;
+                updateServiceStatusIndicator("blmActiveIndicator", false);
             }
-            
-            const viewCount = await app.hostedClaimsLayer.queryFeatureCount(viewQuery);
-            app.statistics.inView = viewCount;
-            document.getElementById("claimsInView").textContent = viewCount.toLocaleString();
-            
         } catch (error) {
-            console.error("Error updating view statistics:", error);
+            status.error = error.message;
+            updateServiceStatusIndicator("blmActiveIndicator", false);
+            console.error("BLM Service Check Error:", error);
+        }
+        
+        return status;
+    }
+    
+    // FIXED: Service status indicator update
+    function updateServiceStatusIndicator(indicatorId, isOnline) {
+        const indicator = document.getElementById(indicatorId);
+        if (indicator) {
+            indicator.className = `sync-indicator ${isOnline ? 'online' : 'offline'}`;
+        }
+        
+        // Update the main service status display
+        const statusText = isOnline ? "Online" : "Offline";
+        const serviceStatusElement = document.getElementById("serviceStatus");
+        if (serviceStatusElement) {
+            serviceStatusElement.innerHTML = 
+                `BLM Service: <span class="sync-indicator ${isOnline ? 'online' : 'offline'}"></span> ${statusText}`;
         }
     }
     
-    // Main change detection function with Extract Changes
+    // Check service status for all services
+    async function checkServiceStatus() {
+        try {
+            // Check BLM services
+            const blmCheck = await checkBLMServiceStatus();
+            app.serviceStatus.blmActive = blmCheck.available;
+            
+            // Update status display
+            const statusText = blmCheck.available ? "Online" : "Offline";
+            const serviceStatusElement = document.getElementById("serviceStatus");
+            if (serviceStatusElement) {
+                serviceStatusElement.innerHTML = 
+                    `BLM Service: <span class="sync-indicator ${blmCheck.available ? 'online' : 'offline'}"></span> ${statusText}`;
+            }
+                
+        } catch (error) {
+            console.error("Error checking service status:", error);
+        }
+    }
+    
+    // FIXED: Date formatting function
+    function formatDateForQuery(date) {
+        // Use ISO format for ArcGIS queries instead of 'short-date-time'
+        if (date instanceof Date) {
+            return date.toISOString();
+        } else if (typeof date === 'string') {
+            return new Date(date).toISOString();
+        }
+        return new Date().toISOString();
+    }
+    
+    // FIXED: Get since date function
+    function getSinceDate() {
+        const dateInput = document.getElementById("checkSinceDate");
+        if (dateInput && dateInput.value) {
+            return new Date(dateInput.value);
+        } else {
+            // Default to stored last check or 30 days ago
+            const stored = localStorage.getItem(CONFIG.storage.lastCheck);
+            if (stored) {
+                return new Date(stored);
+            } else {
+                return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            }
+        }
+    }
+    
+    // FIXED: Initialize date picker
+    function initializeDatePicker() {
+        const dateInput = document.getElementById("checkSinceDate");
+        if (dateInput) {
+            // Set default to 30 days ago
+            const defaultDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            dateInput.value = defaultDate.toISOString().split('T')[0];
+        }
+    }
+    
+    // FIXED: Initialize change detection
+    function initializeChangeDetection() {
+        // Initialize date picker
+        initializeDatePicker();
+        
+        // Update last check display
+        updateLastCheckDisplay();
+        
+        // Check service status
+        checkBLMServiceStatus().then(status => {
+            console.log("Initial BLM service status:", status);
+        });
+        
+        console.log("Change detection initialized");
+    }
+    
+    // FIXED: Update last check display
+    function updateLastCheckDisplay() {
+        const lastCheckElement = document.getElementById("lastCheck");
+        if (lastCheckElement) {
+            const lastCheck = localStorage.getItem(CONFIG.storage.lastCheck);
+            if (lastCheck) {
+                const date = new Date(lastCheck);
+                lastCheckElement.textContent = date.toLocaleString();
+            } else {
+                lastCheckElement.textContent = "Never";
+            }
+        }
+    }
+    
+    // FIXED: Main change detection function
     async function checkForChanges() {
-        if (app.changeDetection.isRunning) {
+        if (app.changeDetection && app.changeDetection.isRunning) {
             showMessage("Change detection already in progress...", "info");
             return;
         }
@@ -590,10 +584,21 @@ require([
         const indicator = document.getElementById("changeCheckIndicator");
         
         try {
+            // Initialize change detection state if not exists
+            if (!app.changeDetection) {
+                app.changeDetection = { isRunning: false, lastResults: null };
+            }
+            
             app.changeDetection.isRunning = true;
-            button.disabled = true;
-            button.textContent = "Checking...";
-            indicator.className = "sync-indicator checking";
+            
+            if (button) {
+                button.disabled = true;
+                button.textContent = "Checking...";
+            }
+            
+            if (indicator) {
+                indicator.className = "sync-indicator checking";
+            }
             
             showMessage("Checking BLM for changes...", "info");
             
@@ -605,41 +610,146 @@ require([
             
             // Get date range for checking
             const sinceDate = getSinceDate();
+            console.log("Checking for changes since:", sinceDate);
             
-            // Use Extract Changes if available, otherwise fall back to query comparison
-            let changes;
-            if (await supportsExtractChanges()) {
-                changes = await extractChangesFromBLM(sinceDate);
-            } else {
-                changes = await detectChangesByComparison(sinceDate);
-            }
+            // Perform change detection
+            const changes = await detectChangesByComparison(sinceDate);
             
-            // Process and display results
-            await processChangeResults(changes);
+            // Update UI with results
+            updateChangeResults(changes);
             
             // Update last check time
-            app.lastExtractTime = new Date();
+            localStorage.setItem(CONFIG.storage.lastCheck, new Date().toISOString());
             updateLastCheckDisplay();
-            localStorage.setItem(CONFIG.storage.lastCheck, app.lastExtractTime.toISOString());
             
-            const totalChanges = changes.new.length + changes.modified.length + changes.deleted.length;
-            showMessage(`Found ${totalChanges} changes since ${sinceDate.toLocaleDateString()}`, 
-                       totalChanges > 0 ? "success" : "info");
-                       
+            showMessage(`Change detection completed. Found ${changes.new.length} new, ${changes.modified.length} modified, ${changes.deleted.length} deleted claims.`, "success");
+            
         } catch (error) {
             console.error("Change detection error:", error);
-            indicator.className = "sync-indicator offline";
-            
-            if (error.message.includes("unavailable") || error.message.includes("offline")) {
-                showMessage("BLM service is currently unavailable", "error");
-            } else {
-                showMessage("Error checking for changes: " + error.message, "error");
-            }
+            showMessage("Error checking for changes: " + error.message, "error");
         } finally {
-            app.changeDetection.isRunning = false;
-            button.disabled = false;
-            button.textContent = "Check for Changes Now";
-            indicator.className = "sync-indicator offline";
+            if (app.changeDetection) {
+                app.changeDetection.isRunning = false;
+            }
+            
+            if (button) {
+                button.disabled = false;
+                button.textContent = "Check for Changes Now";
+            }
+            
+            if (indicator) {
+                indicator.className = "sync-indicator offline";
+            }
+        }
+    }
+    
+    // FIXED: Change detection by comparison
+    async function detectChangesByComparison(sinceDate) {
+        const changes = {
+            new: [],
+            modified: [],
+            deleted: [],
+            timestamp: new Date(),
+            sinceDate: sinceDate
+        };
+        
+        try {
+            // Query BLM services for recent changes
+            const notClosedQuery = {
+                where: `Modified >= timestamp '${formatDateForQuery(sinceDate)}'`,
+                outFields: "*",
+                f: "json",
+                resultRecordCount: 2000
+            };
+            
+            const closedQuery = {
+                where: `Modified >= timestamp '${formatDateForQuery(sinceDate)}'`,
+                outFields: "*", 
+                f: "json",
+                resultRecordCount: 2000
+            };
+            
+            // Query both services
+            const [notClosedResponse, closedResponse] = await Promise.all([
+                queryBLMService(CONFIG.blmServices.notClosedFeatures, notClosedQuery),
+                queryBLMService(CONFIG.blmServices.closedFeatures, closedQuery)
+            ]);
+            
+            // Process results
+            if (notClosedResponse && notClosedResponse.features) {
+                for (const feature of notClosedResponse.features) {
+                    const createdDate = new Date(feature.attributes.Created);
+                    const modifiedDate = new Date(feature.attributes.Modified);
+                    
+                    if (createdDate >= sinceDate) {
+                        changes.new.push(feature);
+                    } else if (modifiedDate >= sinceDate) {
+                        changes.modified.push(feature);
+                    }
+                }
+            }
+            
+            if (closedResponse && closedResponse.features) {
+                // Closed claims are typically deletions from active claims
+                changes.deleted.push(...closedResponse.features);
+            }
+            
+            console.log("Change detection results:", changes);
+            return changes;
+            
+        } catch (error) {
+            console.error("Error in detectChangesByComparison:", error);
+            throw error;
+        }
+    }
+    
+    // FIXED: BLM service query helper
+    async function queryBLMService(serviceUrl, queryParams) {
+        try {
+            const queryString = new URLSearchParams(queryParams).toString();
+            const url = `${serviceUrl}/query?${queryString}`;
+            
+            console.log("Querying BLM service:", url);
+            
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            if (data.error) {
+                throw new Error(data.error.message || "BLM service query error");
+            }
+            
+            return data;
+        } catch (error) {
+            console.error("BLM service query error:", error);
+            throw error;
+        }
+    }
+    
+    // FIXED: Update change results display
+    function updateChangeResults(changes) {
+        // Update dashboard statistics
+        const newCount = document.getElementById("newClaimsCount");
+        const modifiedCount = document.getElementById("modifiedClaimsCount");
+        const deletedCount = document.getElementById("deletedClaimsCount");
+        const recentChanges = document.getElementById("recentChanges");
+        
+        if (newCount) newCount.textContent = changes.new.length;
+        if (modifiedCount) modifiedCount.textContent = changes.modified.length;
+        if (deletedCount) deletedCount.textContent = changes.deleted.length;
+        if (recentChanges) recentChanges.textContent = changes.new.length + changes.modified.length + changes.deleted.length;
+        
+        // Store results for export
+        if (app.changeDetection) {
+            app.changeDetection.lastResults = changes;
+        }
+        
+        // Show change summary
+        const changeSummary = document.getElementById("changeSummary");
+        if (changeSummary) {
+            changeSummary.style.display = "block";
         }
     }
     
@@ -650,571 +760,140 @@ require([
             const serviceInfo = await response.json();
             return serviceInfo.hasStaticData === false && serviceInfo.supportsExtractChanges === true;
         } catch (error) {
-            console.warn("Could not determine Extract Changes support:", error);
+            console.error("Error checking Extract Changes support:", error);
             return false;
         }
     }
     
-    // Extract changes using ArcGIS REST Extract Changes endpoint
+    // Extract changes using ArcGIS Extract Changes operation (if supported)
     async function extractChangesFromBLM(sinceDate) {
-        console.log("Using Extract Changes method");
-        
-        // Get our last serverGen if available
-        const lastServerGen = localStorage.getItem('claimwatch_last_servergen') || '0';
-        
-        const extractQuery = {
-            serverGen: lastServerGen,
-            returnChanges: true,
-            f: "json"
-        };
-        
-        const response = await fetch(
-            CONFIG.blmServices.notClosedFeatures + "/extractChanges?" + 
-            new URLSearchParams(extractQuery)
-        );
-        
-        const data = await response.json();
-        
-        if (data.error) {
-            throw new Error(`Extract Changes error: ${data.error.message}`);
-        }
-        
-        // Store new serverGen
-        if (data.serverGen) {
-            localStorage.setItem('claimwatch_last_servergen', data.serverGen.toString());
-        }
-        
-        return {
-            new: data.addedFeatures || [],
-            modified: data.updatedFeatures || [],
-            deleted: data.deletedFeatureIds || [],
-            serverGen: data.serverGen
-        };
-    }
-    
-    // Fallback method: detect changes by comparing datasets
-    async function detectChangesByComparison(sinceDate) {
-        console.log("Using comparison method for change detection");
-        
-        // Query BLM for recently modified features
-        const blmQuery = new Query({
-            where: `Modified >= '${sinceDate.toISOString().split('T')[0]}'`,
-            outFields: ["*"],
-            returnGeometry: true,
-            resultRecordCount: CONFIG.blmServices.serviceInfo.maxRecordCount
-        });
-        
-        // Get BLM data in batches
-        const blmFeatures = await queryBLMInBatches(CONFIG.blmServices.notClosedFeatures, blmQuery);
-        
-        // Get our corresponding data
-        const ourQuery = app.hostedClaimsLayer.createQuery();
-        ourQuery.where = "1=1";
-        ourQuery.outFields = ["CSE_NR", "Modified", "OBJECTID"];
-        ourQuery.returnGeometry = false;
-        const ourResults = await app.hostedClaimsLayer.queryFeatures(ourQuery);
-        
-        // Compare and categorize changes
-        return compareAndCategorizeChanges(blmFeatures, ourResults.features);
-    }
-    
-    // Query BLM service in batches to handle large datasets
-    async function queryBLMInBatches(serviceUrl, query, allFeatures = []) {
         try {
-            const response = await fetch(serviceUrl + "/query?" + new URLSearchParams({
-                where: query.where,
-                outFields: query.outFields.join(","),
-                returnGeometry: query.returnGeometry,
-                f: "json",
-                resultRecordCount: query.resultRecordCount,
-                resultOffset: allFeatures.length
-            }));
+            const extractUrl = CONFIG.blmServices.notClosedFeatures + "/extractChanges";
+            const params = {
+                serverGen: Math.floor(sinceDate.getTime() / 1000),
+                queries: JSON.stringify([{
+                    layerId: 0,
+                    where: "1=1"
+                }]),
+                f: "json"
+            };
+            
+            const response = await fetch(extractUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: new URLSearchParams(params)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Extract Changes failed: ${response.statusText}`);
+            }
             
             const data = await response.json();
-            
             if (data.error) {
-                throw new Error(`BLM query error: ${data.error.message}`);
+                throw new Error(data.error.message);
             }
             
-            if (data.features && data.features.length > 0) {
-                allFeatures = allFeatures.concat(data.features);
-                
-                // If we got the max count, there might be more
-                if (data.features.length === query.resultRecordCount) {
-                    return await queryBLMInBatches(serviceUrl, query, allFeatures);
-                }
-            }
-            
-            return allFeatures;
+            return {
+                new: data.edits?.adds || [],
+                modified: data.edits?.updates || [],
+                deleted: data.edits?.deletes || [],
+                timestamp: new Date(),
+                sinceDate: sinceDate
+            };
             
         } catch (error) {
-            console.error("Error querying BLM in batches:", error);
+            console.error("Extract Changes error:", error);
             throw error;
         }
     }
     
-    // Compare BLM features with our hosted data to find changes
-    function compareAndCategorizeChanges(blmFeatures, ourFeatures) {
-        const ourClaimsMap = new Map();
-        ourFeatures.forEach(f => {
-            if (f.attributes && f.attributes.CSE_NR) {
-                ourClaimsMap.set(f.attributes.CSE_NR, {
-                    modified: f.attributes.Modified,
-                    objectId: f.attributes.OBJECTID
-                });
-            }
-        });
-        
-        const blmClaimsMap = new Map();
-        blmFeatures.forEach(f => {
-            if (f.attributes && f.attributes.CSE_NR) {
-                blmClaimsMap.set(f.attributes.CSE_NR, f);
-            }
-        });
-        
-        const changes = {
-            new: [],
-            modified: [],
-            deleted: []
-        };
-        
-        // Find new and modified
-        blmClaimsMap.forEach((blmFeature, claimId) => {
-            if (!ourClaimsMap.has(claimId)) {
-                changes.new.push(blmFeature);
-            } else {
-                const ourClaim = ourClaimsMap.get(claimId);
-                if (ourClaim && blmFeature.attributes.Modified && ourClaim.modified) {
-                    if (new Date(blmFeature.attributes.Modified) > new Date(ourClaim.modified)) {
-                        changes.modified.push(blmFeature);
-                    }
-                }
-            }
-        });
-        
-        // Find deleted (in ours but not in recent BLM data)
-        // Note: This is limited by the date range query
-        ourClaimsMap.forEach((claimInfo, claimId) => {
-            if (!blmClaimsMap.has(claimId)) {
-                changes.deleted.push({
-                    claimId: claimId,
-                    objectId: claimInfo.objectId
-                });
-            }
-        });
-        
-        return changes;
-    }
-    
-    // Process change detection results
-    async function processChangeResults(changes) {
-        // Update UI
-        document.getElementById("newClaimsCount").textContent = changes.new.length;
-        document.getElementById("modifiedClaimsCount").textContent = changes.modified.length;
-        document.getElementById("deletedClaimsCount").textContent = changes.deleted.length;
-        document.getElementById("changeSummary").style.display = "block";
-        
-        // Store results for export
-        app.changeDetection.lastResults = {
-            ...changes,
-            timestamp: new Date(),
-            sinceDate: getSinceDate()
-        };
-        
-        // Apply changes to hosted layer if any found
-        if (changes.new.length > 0 || changes.modified.length > 0 || changes.deleted.length > 0) {
-            if (confirm(`Apply ${changes.new.length + changes.modified.length + changes.deleted.length} changes to your hosted data?`)) {
-                await applyChangesToHosted(changes);
-                await logChangesToHistory(changes);
-                await updateStatistics();
-            }
-        }
-    }
-    
-    // Apply changes to hosted feature layer
+    // Apply changes to hosted layer
     async function applyChangesToHosted(changes) {
         try {
+            showMessage("Applying changes to hosted data...", "info");
+            
             const edits = {
-                addFeatures: [],
-                updateFeatures: [],
-                deleteFeatures: []
+                addFeatures: changes.new,
+                updateFeatures: changes.modified,
+                deleteFeatures: changes.deleted.map(f => ({ objectId: f.attributes.OBJECTID }))
             };
             
-            // Prepare new features
-            changes.new.forEach(feature => {
-                edits.addFeatures.push({
-                    geometry: feature.geometry,
-                    attributes: feature.attributes
-                });
-            });
+            const result = await app.hostedClaimsLayer.applyEdits(edits);
             
-            // Prepare updates
-            for (const feature of changes.modified) {
-                const query = app.hostedClaimsLayer.createQuery();
-                query.where = `CSE_NR = '${feature.attributes.CSE_NR}'`;
-                query.outFields = ["OBJECTID"];
-                const result = await app.hostedClaimsLayer.queryFeatures(query);
-                
-                if (result.features.length > 0) {
-                    edits.updateFeatures.push({
-                        geometry: feature.geometry,
-                        attributes: {
-                            ...feature.attributes,
-                            OBJECTID: result.features[0].attributes.OBJECTID
-                        }
-                    });
-                }
-            }
-            
-            // Prepare deletions
-            changes.deleted.forEach(change => {
-                if (change.objectId) {
-                    edits.deleteFeatures.push({
-                        objectId: change.objectId
-                    });
-                }
-            });
-            
-            // Apply edits
-            if (edits.addFeatures.length > 0 || edits.updateFeatures.length > 0 || edits.deleteFeatures.length > 0) {
-                const result = await app.hostedClaimsLayer.applyEdits(edits);
-                console.log("Applied edits to hosted layer:", result);
-                showMessage("Changes applied to hosted data successfully", "success");
+            if (result.addFeatureResults.length > 0 || 
+                result.updateFeatureResults.length > 0 || 
+                result.deleteFeatureResults.length > 0) {
+                showMessage("Changes applied successfully to hosted data", "success");
+                await updateStatistics();
             }
             
         } catch (error) {
             console.error("Error applying changes:", error);
-            showMessage("Error applying changes to hosted layer", "error");
+            showMessage("Error applying changes: " + error.message, "error");
         }
     }
     
-    // Log changes to history layer
+    // Log changes to history
     async function logChangesToHistory(changes) {
         try {
             const historyFeatures = [];
-            const changeDate = Date.now();
             
             // Log new claims
             changes.new.forEach(feature => {
                 historyFeatures.push({
-                    geometry: {
-                        type: "point",
-                        x: feature.attributes.CASE_LND_LONGITUDE || -115,
-                        y: feature.attributes.CASE_LND_LATITUDE || 40
-                    },
                     attributes: {
-                        change_id: `NEW_${feature.attributes.CSE_NR}_${changeDate}`,
-                        change_date: changeDate,
-                        change_type: "new",
-                        claim_id: feature.attributes.CSE_NR,
-                        claim_name: feature.attributes.CSE_NAME || "Unknown",
-                        state: feature.attributes.ADMIN_STATE || "UNK",
-                        county: feature.attributes.ADMIN_CNTY || "Unknown",
-                        acres: feature.attributes.RCRD_ACRS || 0,
-                        new_status: feature.attributes.CSE_DISP || "Active"
-                    }
+                        claim_id: feature.attributes.ID,
+                        change_type: "NEW",
+                        change_date: new Date().getTime(),
+                        details: `New claim: ${feature.attributes.CSE_NAME}`
+                    },
+                    geometry: feature.geometry
                 });
             });
             
             // Log modified claims
             changes.modified.forEach(feature => {
                 historyFeatures.push({
-                    geometry: {
-                        type: "point",
-                        x: feature.attributes.CASE_LND_LONGITUDE || -115,
-                        y: feature.attributes.CASE_LND_LATITUDE || 40
-                    },
                     attributes: {
-                        change_id: `MOD_${feature.attributes.CSE_NR}_${changeDate}`,
-                        change_date: changeDate,
-                        change_type: "modified",
-                        claim_id: feature.attributes.CSE_NR,
-                        claim_name: feature.attributes.CSE_NAME || "Unknown",
-                        state: feature.attributes.ADMIN_STATE || "UNK",
-                        county: feature.attributes.ADMIN_CNTY || "Unknown",
-                        acres: feature.attributes.RCRD_ACRS || 0,
-                        new_status: feature.attributes.CSE_DISP || "Active"
-                    }
+                        claim_id: feature.attributes.ID,
+                        change_type: "MODIFIED",
+                        change_date: new Date().getTime(),
+                        details: `Modified claim: ${feature.attributes.CSE_NAME}`
+                    },
+                    geometry: feature.geometry
                 });
             });
             
             // Log deleted claims
-            changes.deleted.forEach(change => {
+            changes.deleted.forEach(feature => {
                 historyFeatures.push({
-                    geometry: {
-                        type: "point",
-                        x: -115,
-                        y: 40
-                    },
                     attributes: {
-                        change_id: `DEL_${change.claimId}_${changeDate}`,
-                        change_date: changeDate,
-                        change_type: "deleted",
-                        claim_id: change.claimId,
-                        claim_name: "DELETED",
-                        state: "UNK",
-                        county: "Unknown",
-                        acres: 0,
-                        old_status: "Active",
-                        new_status: "Deleted"
-                    }
+                        claim_id: feature.attributes.ID,
+                        change_type: "DELETED",
+                        change_date: new Date().getTime(),
+                        details: `Deleted claim: ${feature.attributes.CSE_NAME}`
+                    },
+                    geometry: feature.geometry
                 });
             });
             
-            // Add to history layer
             if (historyFeatures.length > 0) {
-                const result = await app.changeHistoryLayer.applyEdits({
+                await app.changeHistoryLayer.applyEdits({
                     addFeatures: historyFeatures
                 });
-                console.log("Logged changes to history:", result);
-            }
-            
-        } catch (error) {
-            console.error("Error logging changes to history:", error);
-            // Don't show error to user - history logging is supplementary
-        }
-    }
-    
-    // Create a new AOI
-    async function createAOI(graphic) {
-        const name = prompt("Enter a name for this monitoring area:");
-        if (!name) return;
-        
-        const description = prompt("Enter a description (optional):");
-        
-        try {
-            // Count claims in AOI
-            const query = app.hostedClaimsLayer.createQuery();
-            query.geometry = graphic.geometry;
-            query.spatialRelationship = "intersects";
-            const count = await app.hostedClaimsLayer.queryFeatureCount(query);
-            
-            // Create feature
-            const feature = {
-                geometry: graphic.geometry,
-                attributes: {
-                    aoi_name: name,
-                    description: description || "",
-                    created_date: Date.now(),
-                    total_claims: count,
-                    recent_changes: 0,
-                    last_analysis: Date.now()
-                }
-            };
-            
-            // Add to portal
-            const result = await app.aoiFeatureLayer.applyEdits({
-                addFeatures: [feature]
-            });
-            
-            if (result.addFeatureResults && result.addFeatureResults.length > 0) {
-                showMessage(`AOI "${name}" created with ${count} claims`, "success");
-                await loadAOIsFromPortal();
-            } else {
-                showMessage("Error creating AOI", "error");
-            }
-            
-            // Clear drawing
-            app.aoiDrawingLayer.removeAll();
-            
-        } catch (error) {
-            console.error("Error creating AOI:", error);
-            showMessage("Error creating AOI", "error");
-        }
-    }
-    
-    // Load AOIs from portal
-    async function loadAOIsFromPortal() {
-        try {
-            const query = app.aoiFeatureLayer.createQuery();
-            query.where = "1=1";
-            query.returnGeometry = true;
-            query.outFields = ["*"];
-            
-            const results = await app.aoiFeatureLayer.queryFeatures(query);
-            
-            app.aois = results.features.map(feature => ({
-                id: feature.attributes.OBJECTID,
-                name: feature.attributes.aoi_name,
-                description: feature.attributes.description,
-                geometry: feature.geometry,
-                created: new Date(feature.attributes.created_date),
-                claimCount: feature.attributes.total_claims || 0,
-                recentChanges: feature.attributes.recent_changes || 0
-            }));
-            
-            updateAOIList();
-            
-        } catch (error) {
-            console.error("Error loading AOIs:", error);
-        }
-    }
-    
-    // Update AOI list display
-    function updateAOIList() {
-        const listDiv = document.getElementById("aoiList");
-        
-        if (app.aois.length === 0) {
-            listDiv.innerHTML = '<div class="loading">No AOIs created yet</div>';
-            return;
-        }
-        
-        listDiv.innerHTML = app.aois.map(aoi => `
-            <div class="aoi-item" data-id="${aoi.id}">
-                <div>
-                    <div class="aoi-name">${aoi.name}</div>
-                    <div class="aoi-stats">${aoi.claimCount} claims, ${aoi.recentChanges} recent changes</div>
-                </div>
-                <button class="button secondary" style="width: auto; padding: 5px 10px;" 
-                        onclick="zoomToAOI(${aoi.id})">Zoom</button>
-            </div>
-        `).join('');
-    }
-    
-    // Analyze all AOIs for changes
-    async function analyzeAllAOIs() {
-        if (app.aois.length === 0) {
-            showMessage("No AOIs to analyze", "info");
-            return;
-        }
-        
-        showMessage("Analyzing AOIs for changes...", "info");
-        
-        try {
-            const results = [];
-            
-            for (const aoi of app.aois) {
-                // Query changes within AOI
-                const changeQuery = app.changeHistoryLayer.createQuery();
-                changeQuery.geometry = aoi.geometry;
-                changeQuery.spatialRelationship = "intersects";
-                changeQuery.where = "1=1";
-                changeQuery.outFields = ["change_type"];
                 
-                const changeResults = await app.changeHistoryLayer.queryFeatures(changeQuery);
-                
-                const analysis = {
-                    name: aoi.name,
-                    totalClaims: aoi.claimCount,
-                    totalChanges: changeResults.features.length,
-                    newClaims: changeResults.features.filter(f => f.attributes.change_type === "new").length,
-                    modifiedClaims: changeResults.features.filter(f => f.attributes.change_type === "modified").length,
-                    deletedClaims: changeResults.features.filter(f => f.attributes.change_type === "deleted").length
-                };
-                
-                results.push(analysis);
+                showMessage(`Logged ${historyFeatures.length} changes to history`, "info");
             }
             
-            displayAOIAnalysis(results);
-            
         } catch (error) {
-            console.error("Error analyzing AOIs:", error);
-            showMessage("Error analyzing AOIs", "error");
+            console.error("Error logging changes:", error);
+            showMessage("Error logging changes: " + error.message, "error");
         }
     }
     
-    // Display AOI analysis results
-    function displayAOIAnalysis(results) {
-        const resultsDiv = document.getElementById("aoiSummaryResults");
-        const analysisDiv = document.getElementById("aoiAnalysis");
-        
-        resultsDiv.innerHTML = results.map(result => `
-            <div class="stat-card">
-                <h4>${result.name}</h4>
-                <div>Claims: ${result.totalClaims}</div>
-                <div>Changes: ${result.totalChanges} (${result.newClaims} new, ${result.modifiedClaims} modified, ${result.deletedClaims} deleted)</div>
-            </div>
-        `).join('');
-        
-        analysisDiv.style.display = "block";
-        showMessage("AOI analysis completed", "success");
-    }
-    
-    // Check BLM service status
-    async function checkBLMServiceStatus() {
-        const status = { available: false, error: null };
-        
-        try {
-            const response = await fetch(CONFIG.blmServices.notClosedFeatures + "?f=json");
-            if (response.ok) {
-                const data = await response.json();
-                if (!data.error) {
-                    status.available = true;
-                    updateServiceStatusIndicator("blmActiveIndicator", true);
-                }
-            }
-        } catch (error) {
-            status.error = error.message;
-            updateServiceStatusIndicator("blmActiveIndicator", false);
-        }
-        
-        return status;
-    }
-    
-    // Check all service statuses
-    async function checkServiceStatus() {
-        // Check BLM services
-        try {
-            const blmCheck = await checkBLMServiceStatus();
-            app.serviceStatus.blmActive = blmCheck.available;
-            
-            // Update status display
-            const statusText = blmCheck.available ? "Online" : "Offline";
-            document.getElementById("serviceStatus").innerHTML = 
-                `BLM Service: <span class="sync-indicator ${blmCheck.available ? 'online' : 'offline'}"></span> ${statusText}`;
-                
-        } catch (error) {
-            console.error("Error checking service status:", error);
-        }
-    }
-    
-    // Utility functions
-    function getSinceDate() {
-        const inputDate = document.getElementById("checkSinceDate").value;
-        if (inputDate) {
-            return new Date(inputDate);
-        } else {
-            const stored = localStorage.getItem(CONFIG.storage.lastCheck);
-            if (stored) {
-                return new Date(stored);
-            } else {
-                return new Date(Date.now() - CONFIG.changeDetection.defaultDateRange * 24 * 60 * 60 * 1000);
-            }
-        }
-    }
-    
-    function initializeDatePicker() {
-        const dateInput = document.getElementById("checkSinceDate");
-        const defaultDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
-        dateInput.value = defaultDate.toISOString().split('T')[0];
-    }
-    
-    function updateUserInfo(user) {
-        console.log("updateUserInfo called with:", user);
-        const userInfoElement = document.getElementById("userInfo");
-        if (user && user.username) {
-            userInfoElement.textContent = user.username;
-            console.log("Set username to:", user.username);
-        } else {
-            userInfoElement.textContent = "Not logged in";
-            console.log("No user or username found");
-        }
-    }
-    
-    function updateServiceStatusIndicator(indicatorId, isOnline) {
-        const indicator = document.getElementById(indicatorId);
-        if (indicator) {
-            indicator.className = `sync-indicator ${isOnline ? 'online' : 'offline'}`;
-        }
-    }
-    
-    function updateLastCheckDisplay() {
-        if (app.lastExtractTime) {
-            document.getElementById("lastCheckTime").textContent = 
-                `Last check: ${app.lastExtractTime.toLocaleString()}`;
-        }
-    }
-    
+    // Set up automatic checking
     function setupAutoCheck(frequency) {
         // Clear existing interval
         if (app.autoCheckInterval) {
@@ -1222,12 +901,7 @@ require([
             app.autoCheckInterval = null;
         }
         
-        if (frequency === "manual") {
-            document.getElementById("nextCheckTime").style.display = "none";
-            return;
-        }
-        
-        let intervalMs;
+        let intervalMs = 0;
         switch (frequency) {
             case "hourly":
                 intervalMs = 60 * 60 * 1000;
@@ -1241,9 +915,14 @@ require([
             app.autoCheckInterval = setInterval(checkForChanges, intervalMs);
             
             const nextCheck = new Date(Date.now() + intervalMs);
-            document.getElementById("nextCheckTime").style.display = "block";
-            document.getElementById("nextCheckTime").querySelector("span").textContent = 
-                nextCheck.toLocaleString();
+            const nextCheckElement = document.getElementById("nextCheckTime");
+            if (nextCheckElement) {
+                nextCheckElement.style.display = "block";
+                const spanElement = nextCheckElement.querySelector("span");
+                if (spanElement) {
+                    spanElement.textContent = nextCheck.toLocaleString();
+                }
+            }
         }
     }
     
@@ -1266,101 +945,407 @@ require([
         }
         
         const csv = generateAOIReportCSV(app.aois);
-        downloadCSV(csv, `ClaimWatch_AOIs_${new Date().toISOString().split('T')[0]}.csv`);
+        downloadCSV(csv, `ClaimWatch_AOI_Report_${new Date().toISOString().split('T')[0]}.csv`);
     }
     
+    // Generate CSV for change report
     function generateChangeReportCSV(results) {
-        const csv = [];
-        csv.push("Type,Claim_ID,Claim_Name,State,County,Acres,Date,Longitude,Latitude");
+        let csv = "Type,Count,Details\n";
+        csv += `New Claims,${results.new.length},Claims created since ${results.sinceDate.toISOString()}\n`;
+        csv += `Modified Claims,${results.modified.length},Claims modified since ${results.sinceDate.toISOString()}\n`;
+        csv += `Deleted Claims,${results.deleted.length},Claims closed/deleted since ${results.sinceDate.toISOString()}\n`;
+        csv += `Total Changes,${results.new.length + results.modified.length + results.deleted.length},All changes since ${results.sinceDate.toISOString()}\n`;
         
-        // Add changes
+        // Add detailed records
+        csv += "\n\nDetailed Records:\n";
+        csv += "Change Type,Claim ID,Case Name,Case Number,Acres,Created,Modified\n";
+        
         results.new.forEach(feature => {
             const attrs = feature.attributes;
-            csv.push(`New,${attrs.CSE_NR},${attrs.CSE_NAME},${attrs.ADMIN_STATE},${attrs.ADMIN_CNTY},${attrs.RCRD_ACRS},${attrs.Modified},${attrs.CASE_LND_LONGITUDE},${attrs.CASE_LND_LATITUDE}`);
+            csv += `NEW,"${attrs.ID}","${attrs.CSE_NAME || ''}","${attrs.CSE_NR || ''}","${attrs.RCRD_ACRS || ''}","${new Date(attrs.Created).toISOString()}","${new Date(attrs.Modified).toISOString()}"\n`;
         });
         
         results.modified.forEach(feature => {
             const attrs = feature.attributes;
-            csv.push(`Modified,${attrs.CSE_NR},${attrs.CSE_NAME},${attrs.ADMIN_STATE},${attrs.ADMIN_CNTY},${attrs.RCRD_ACRS},${attrs.Modified},${attrs.CASE_LND_LONGITUDE},${attrs.CASE_LND_LATITUDE}`);
+            csv += `MODIFIED,"${attrs.ID}","${attrs.CSE_NAME || ''}","${attrs.CSE_NR || ''}","${attrs.RCRD_ACRS || ''}","${new Date(attrs.Created).toISOString()}","${new Date(attrs.Modified).toISOString()}"\n`;
         });
         
-        results.deleted.forEach(change => {
-            csv.push(`Deleted,${change.claimId},DELETED,,,,,`);
+        results.deleted.forEach(feature => {
+            const attrs = feature.attributes;
+            csv += `DELETED,"${attrs.ID}","${attrs.CSE_NAME || ''}","${attrs.CSE_NR || ''}","${attrs.RCRD_ACRS || ''}","${new Date(attrs.Created).toISOString()}","${new Date(attrs.Modified).toISOString()}"\n`;
         });
         
-        return csv.join("\n");
+        return csv;
     }
     
+    // Generate CSV for AOI report
     function generateAOIReportCSV(aois) {
-        const csv = [];
-        csv.push("AOI_Name,Description,Created_Date,Total_Claims,Recent_Changes");
+        let csv = "AOI Name,Created,Claims Count,Total Acres,Recent Changes\n";
         
         aois.forEach(aoi => {
-            csv.push(`${aoi.name},${aoi.description || ""},${aoi.created.toISOString().split('T')[0]},${aoi.claimCount},${aoi.recentChanges}`);
+            csv += `"${aoi.name}","${aoi.created.toISOString()}","${aoi.claimsCount || 0}","${aoi.totalAcres || 0}","${aoi.recentChanges || 0}"\n`;
         });
         
-        return csv.join("\n");
+        return csv;
     }
     
-    function downloadCSV(csvContent, filename) {
-        const blob = new Blob([csvContent], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
+    // Download CSV file
+    function downloadCSV(content, filename) {
+        const blob = new Blob([content], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
         a.href = url;
         a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(url);
+        showMessage(`Downloaded: ${filename}`, "success");
     }
     
-    function showMessage(text, type = "info") {
-        const messageDiv = document.getElementById("messageDiv");
-        messageDiv.textContent = text;
-        messageDiv.style.background = 
-            type === "success" ? "#28a745" : 
-            type === "error" ? "#dc3545" : "#17a2b8";
-        messageDiv.style.display = "block";
+    // Filter functions
+    function setFilter(filterType) {
+        app.currentFilter = filterType;
         
-        setTimeout(() => {
-            messageDiv.style.display = "none";
-        }, CONFIG.ui.messageTimeout);
+        // Update button states
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        document.getElementById(`filter${filterType.charAt(0).toUpperCase() + filterType.slice(1)}`).classList.add('active');
+        
+        // Apply filter
+        applyFilter();
     }
     
-    // Global functions (called from HTML)
-    window.zoomToAOI = function(aoiId) {
-        const aoi = app.aois.find(a => a.id === aoiId);
-        if (aoi && aoi.geometry) {
-            app.view.goTo(aoi.geometry);
+    function applyFilter() {
+        let whereClause = "1=1";
+        
+        switch (app.currentFilter) {
+            case "recent":
+                const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                whereClause = `Modified >= timestamp '${formatDateForQuery(sevenDaysAgo)}'`;
+                break;
+            case "paymentRisk":
+                // Define payment risk criteria
+                whereClause = "CSE_DISP IS NULL OR CSE_DISP = ''";
+                break;
         }
-    };
+        
+        if (app.hostedClaimsLayer) {
+            app.hostedClaimsLayer.definitionExpression = whereClause;
+        }
+        
+        updateStatistics();
+    }
     
-    // Global sign-in function
-    window.signIn = function() {
-        IdentityManager.getCredential(portal.url).then(function(credential) {
-            // Force reload the portal with new credentials
-            portal.user = null; // Clear cached user
-            return portal.load();
-        }).then(function() {
-            console.log("Portal reloaded, user:", portal.user);
-            if (portal.user) {
-                updateUserInfo(portal.user);
-                showMessage("Signed in as " + portal.user.username, "success");
-            } else {
-                // Try one more time to get user info
-                setTimeout(() => {
-                    portal.load().then(() => {
-                        console.log("Second attempt, user:", portal.user);
-                        updateUserInfo(portal.user);
-                    });
-                }, 1000);
+    // AOI functions
+    function startAOIDrawing() {
+        app.sketch.create("polygon");
+        showMessage("Click to start drawing an Area of Interest", "info");
+    }
+    
+    function clearAOIDrawing() {
+        app.aoiDrawingLayer.removeAll();
+        app.aois = [];
+        updateAOIList();
+        showMessage("AOI drawing cleared", "info");
+    }
+    
+    function addAOI(graphic) {
+        const aoi = {
+            id: Date.now(),
+            name: `AOI ${app.aois.length + 1}`,
+            geometry: graphic.geometry,
+            created: new Date(),
+            graphic: graphic
+        };
+        
+        app.aois.push(aoi);
+        updateAOIList();
+        saveAOIsToPortal();
+        showMessage(`AOI "${aoi.name}" added`, "success");
+    }
+    
+    function updateAOI(graphic) {
+        // Find and update existing AOI
+        const aoi = app.aois.find(a => a.graphic === graphic);
+        if (aoi) {
+            aoi.geometry = graphic.geometry;
+            saveAOIsToPortal();
+            showMessage(`AOI "${aoi.name}" updated`, "success");
+        }
+    }
+    
+    function updateAOIList() {
+        const aoiList = document.getElementById("aoiList");
+        if (!aoiList) return;
+        
+        if (app.aois.length === 0) {
+            aoiList.innerHTML = "<p>No AOIs created yet</p>";
+            return;
+        }
+        
+        aoiList.innerHTML = app.aois.map(aoi => 
+            `<div class="aoi-item">
+                <strong>${aoi.name}</strong>
+                <span>Created: ${aoi.created.toLocaleDateString()}</span>
+                <button onclick="removeAOI(${aoi.id})">Remove</button>
+            </div>`
+        ).join('');
+    }
+    
+    function removeAOI(aoiId) {
+        const index = app.aois.findIndex(aoi => aoi.id === aoiId);
+        if (index > -1) {
+            const aoi = app.aois[index];
+            app.aoiDrawingLayer.remove(aoi.graphic);
+            app.aois.splice(index, 1);
+            updateAOIList();
+            saveAOIsToPortal();
+            showMessage(`AOI "${aoi.name}" removed`, "info");
+        }
+    }
+    
+    // Save AOIs to portal
+    async function saveAOIsToPortal() {
+        try {
+            if (!app.aoiFeatureLayer) return;
+            
+            const features = app.aois.map(aoi => ({
+                geometry: aoi.geometry,
+                attributes: {
+                    name: aoi.name,
+                    created: aoi.created.getTime(),
+                    aoi_id: aoi.id
+                }
+            }));
+            
+            // Clear existing and add new
+            await app.aoiFeatureLayer.applyEdits({
+                deleteFeatures: { where: "1=1" },
+                addFeatures: features
+            });
+            
+        } catch (error) {
+            console.error("Error saving AOIs:", error);
+        }
+    }
+    
+    // Load AOIs from portal
+    async function loadAOIsFromPortal() {
+        try {
+            if (!app.aoiFeatureLayer) return;
+            
+            const query = app.aoiFeatureLayer.createQuery();
+            query.where = "1=1";
+            query.returnGeometry = true;
+            
+            const results = await app.aoiFeatureLayer.queryFeatures(query);
+            
+            app.aois = results.features.map(feature => {
+                const graphic = new Graphic({
+                    geometry: feature.geometry,
+                    symbol: {
+                        type: "simple-fill",
+                        color: [255, 0, 0, 0.3],
+                        outline: {
+                            color: [255, 0, 0, 0.8],
+                            width: 2
+                        }
+                    }
+                });
+                
+                app.aoiDrawingLayer.add(graphic);
+                
+                return {
+                    id: feature.attributes.aoi_id,
+                    name: feature.attributes.name,
+                    geometry: feature.geometry,
+                    created: new Date(feature.attributes.created),
+                    graphic: graphic
+                };
+            });
+            
+            updateAOIList();
+            
+        } catch (error) {
+            console.error("Error loading AOIs:", error);
+        }
+    }
+    
+    // Analyze all AOIs
+    async function analyzeAllAOIs() {
+        if (app.aois.length === 0) {
+            showMessage("No AOIs to analyze", "info");
+            return;
+        }
+        
+        showMessage("Analyzing AOIs...", "info");
+        
+        try {
+            for (const aoi of app.aois) {
+                await analyzeAOI(aoi);
             }
-        }).catch(function(error) {
-            console.error("Sign-in error:", error);
-            showMessage("Sign-in failed", "error");
-        });
+            
+            showMessage("AOI analysis completed", "success");
+            
+        } catch (error) {
+            console.error("Error analyzing AOIs:", error);
+            showMessage("Error analyzing AOIs: " + error.message, "error");
+        }
+    }
+    
+    // Analyze individual AOI
+    async function analyzeAOI(aoi) {
+        try {
+            // Query claims within AOI
+            const query = new Query({
+                geometry: aoi.geometry,
+                spatialRelationship: "intersects",
+                returnGeometry: false,
+                outFields: ["*"]
+            });
+            
+            const results = await app.hostedClaimsLayer.queryFeatures(query);
+            
+            // Calculate statistics
+            aoi.claimsCount = results.features.length;
+            aoi.totalAcres = results.features.reduce((sum, feature) => 
+                sum + (feature.attributes.RCRD_ACRS || 0), 0);
+            
+            // Check for recent changes
+            const recentQuery = new Query({
+                geometry: aoi.geometry,
+                spatialRelationship: "intersects",
+                where: `Modified >= timestamp '${formatDateForQuery(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))}'`,
+                returnGeometry: false
+            });
+            
+            const recentResults = await app.hostedClaimsLayer.queryFeatures(recentQuery);
+            aoi.recentChanges = recentResults.features.length;
+            
+        } catch (error) {
+            console.error(`Error analyzing AOI ${aoi.name}:`, error);
+            throw error;
+        }
+    }
+    
+    // Statistics functions
+    async function updateStatistics() {
+        try {
+            await updateTotalStatistics();
+            await updateViewStatistics();
+            await updateRecentStatistics();
+            
+        } catch (error) {
+            console.error("Error updating statistics:", error);
+        }
+    }
+    
+    async function updateTotalStatistics() {
+        try {
+            if (!app.hostedClaimsLayer) return;
+            
+            const query = app.hostedClaimsLayer.createQuery();
+            query.where = "1=1";
+            
+            const result = await app.hostedClaimsLayer.queryFeatureCount(query);
+            app.statistics.total = result;
+            
+            const totalElement = document.getElementById("totalClaims");
+            if (totalElement) {
+                totalElement.textContent = result.toLocaleString();
+            }
+            
+        } catch (error) {
+            console.error("Error updating total statistics:", error);
+        }
+    }
+    
+    async function updateViewStatistics() {
+        try {
+            if (!app.hostedClaimsLayer || !app.view) return;
+            
+            const query = app.hostedClaimsLayer.createQuery();
+            query.geometry = app.view.extent;
+            query.spatialRelationship = "intersects";
+            
+            const result = await app.hostedClaimsLayer.queryFeatureCount(query);
+            app.statistics.inView = result;
+            
+            const inViewElement = document.getElementById("claimsInView");
+            if (inViewElement) {
+                inViewElement.textContent = result.toLocaleString();
+            }
+            
+        } catch (error) {
+            console.error("Error updating view statistics:", error);
+        }
+    }
+    
+    async function updateRecentStatistics() {
+        try {
+            if (!app.hostedClaimsLayer) return;
+            
+            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            const query = app.hostedClaimsLayer.createQuery();
+            query.where = `Modified >= timestamp '${formatDateForQuery(sevenDaysAgo)}'`;
+            
+            const result = await app.hostedClaimsLayer.queryFeatureCount(query);
+            app.statistics.recent = result;
+            
+            const recentElement = document.getElementById("recentChanges");
+            if (recentElement) {
+                recentElement.textContent = result.toLocaleString();
+            }
+            
+        } catch (error) {
+            console.error("Error updating recent statistics:", error);
+        }
+    }
+    
+    function updateStatisticsInView() {
+        updateViewStatistics();
+    }
+    
+    // Message display function
+    function showMessage(message, type = 'info') {
+        const messageArea = document.getElementById('messageArea');
+        if (!messageArea) {
+            console.log(`[${type.toUpperCase()}] ${message}`);
+            return;
+        }
+        
+        const timestamp = new Date().toLocaleTimeString();
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}`;
+        messageDiv.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+        
+        messageArea.appendChild(messageDiv);
+        messageArea.scrollTop = messageArea.scrollHeight;
+        
+        // Auto-remove after 10 seconds for non-error messages
+        if (type !== 'error') {
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.parentNode.removeChild(messageDiv);
+                }
+            }, 10000);
+        }
+    }
+    
+    // Global functions (accessible from HTML)
+    window.checkForChanges = checkForChanges;
+    window.exportChangeReport = exportChangeReport;
+    window.exportAOIReport = exportAOIReport;
+    window.analyzeAllAOIs = analyzeAllAOIs;
+    window.removeAOI = removeAOI;
+    window.signIn = function() {
+        IdentityManager.getCredential(portalUrl);
     };
     
     // Initialize the application
     init();
-});
+    
+}); // End of require function
