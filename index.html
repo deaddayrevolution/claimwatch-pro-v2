@@ -1,31 +1,59 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>ClaimWatch Pro - Mining Claims Monitor</title>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css" />
+  <title>ClaimWatch Pro – Mining Intelligence Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    html, body, #viewDiv { height: 100%; width: 100%; margin: 0; padding: 0; }
-    #sidebar { position: absolute; top: 20px; right: 20px; width: 350px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.08);}
-    .stat { font-size: 18px; margin-bottom: 8px; }
-    .button { padding: 8px 16px; background: #2b7bba; color: #fff; border: none; border-radius: 3px; margin-bottom: 8px; cursor: pointer;}
-    .aoi-item { padding: 5px 0; border-bottom: 1px solid #eee; }
+    html, body, #viewDiv { height: 100%; width: 100%; margin: 0; padding: 0;}
+    #sidebar {
+      position: absolute; top: 16px; left: 16px; width: 400px; background: #fff;
+      padding: 20px 24px 24px 24px; border-radius: 8px; box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      max-height: 90%; overflow-y: auto; z-index: 20;
+    }
+    h2 { margin-top: 0; color: #2b7bba;}
+    label { font-weight: bold; margin-top: 10px;}
+    .section { margin-bottom: 24px;}
+    .button {
+      background: #2b7bba; color: #fff; border: none; border-radius: 4px;
+      padding: 8px 16px; font-size: 16px; cursor: pointer; margin-top: 8px; margin-bottom: 16px;
+    }
+    .button:disabled { background: #bbb;}
+    #resultTable { width: 100%; border-collapse: collapse; margin-top: 14px;}
+    #resultTable th, #resultTable td { border: 1px solid #ddd; padding: 5px 7px; text-align: left;}
+    #resultTable th { background: #f8f8f8;}
+    .chart-wrap { width: 100%; margin: 16px 0;}
+    .success { color: #28a745;}
+    .error { color: #c82333;}
+    .info { color: #2b7bba;}
+    .aoi-list { max-height: 120px; overflow-y: auto; border: 1px solid #ddd; margin-bottom: 8px;}
+    .aoi-item { cursor: pointer; padding: 5px; border-bottom: 1px solid #eee;}
+    .aoi-item.selected { background: #e7f0fa;}
   </style>
 </head>
 <body>
   <div id="viewDiv"></div>
   <div id="sidebar">
-    <h2>ClaimWatch Dashboard</h2>
-    <div class="stat">New Claims in AOI: <span id="newClaimsCount">0</span></div>
-    <div class="stat">Modified Claims in AOI: <span id="modifiedClaimsCount">0</span></div>
-    <div class="stat">Deleted Claims: <span id="deletedClaimsCount">0</span></div>
-    <button class="button" id="checkChanges">Check for BLM Changes</button>
-    <button class="button" id="drawAOI">Draw New AOI</button>
-    <div>
-      <h3>Areas of Interest (AOI)</h3>
-      <div id="aoiList"></div>
+    <h2>ClaimWatch Pro</h2>
+    <div class="section">
+      <label for="aoiList">Area of Interest:</label>
+      <div class="aoi-list" id="aoiList"></div>
+      <button class="button" id="drawAOI">Draw AOI</button>
     </div>
+    <div class="section">
+      <label for="startDate">Start Date:</label>
+      <input type="date" id="startDate">
+      <label for="endDate" style="margin-left:8px;">End Date:</label>
+      <input type="date" id="endDate">
+      <button class="button" id="runExtract">Search Changes</button>
+    </div>
+    <div class="section" id="summary"></div>
+    <div class="section chart-wrap"><canvas id="claimsChart"></canvas></div>
+    <div class="section" id="tableWrap"></div>
+    <button class="button" id="downloadCSV" style="display:none;">Download CSV</button>
+    <div class="section" id="msg"></div>
   </div>
   <script src="https://js.arcgis.com/4.28/"></script>
   <script src="js/config.js"></script>
