@@ -144,65 +144,18 @@ require([
             await updateStatistics();
             await checkServiceStatus();
             
-            // Initialize change detection features
-            initializeDatePicker();
-            await updateBLMServiceStatus();
-            
             // Set up intervals
             setInterval(updateStatistics, CONFIG.refresh.statistics);
             setInterval(checkServiceStatus, CONFIG.refresh.serviceStatus);
-            setInterval(updateBLMServiceStatus, CONFIG.refresh.serviceStatus || 60000);
+            
+            // Initialize date picker
+            initializeDatePicker();
             
             showMessage("ClaimWatch Pro loaded successfully", "success");
             
         } catch (error) {
             console.error("Initialization error:", error);
             showMessage("Error loading application: " + error.message, "error");
-        }
-    }
-    
-    // Initialize date picker with default value
-    function initializeDatePicker() {
-        const sinceDateInput = document.getElementById("sinceDate");
-        if (sinceDateInput) {
-            // Set default date to 30 days ago
-            const defaultDate = new Date();
-            defaultDate.setDate(defaultDate.getDate() - 30);
-            sinceDateInput.value = defaultDate.toISOString().split('T')[0];
-        }
-        
-        // Load last check time from storage
-        const lastCheck = localStorage.getItem(CONFIG.storage.lastCheck);
-        if (lastCheck) {
-            const lastCheckElement = document.getElementById("lastCheck");
-            if (lastCheckElement) {
-                lastCheckElement.textContent = new Date(lastCheck).toLocaleString();
-            }
-        }
-    }
-    
-    // Update BLM service status
-    async function updateBLMServiceStatus() {
-        try {
-            const response = await fetch(CONFIG.blmServices.notClosedFeatures + "?f=json");
-            const data = await response.json();
-            
-            const statusElement = document.getElementById("blmServiceStatus");
-            if (data && data.name) {
-                if (statusElement) {
-                    statusElement.textContent = "🟢 Online";
-                    statusElement.className = "status-indicator status-online";
-                }
-            } else {
-                throw new Error("Invalid service response");
-            }
-        } catch (error) {
-            const statusElement = document.getElementById("blmServiceStatus");
-            if (statusElement) {
-                statusElement.textContent = "🔴 Offline";
-                statusElement.className = "status-indicator status-offline";
-            }
-            console.error("BLM service status check failed:", error);
         }
     }
     
@@ -627,32 +580,22 @@ require([
     }
     
     // Main change detection function with Extract Changes
-    async function checkForChanges(event) {
-        // Prevent default behavior and stop propagation
-        if (event) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-        
+    async function checkForChanges() {
         if (app.changeDetection.isRunning) {
             showMessage("Change detection already in progress...", "info");
             return;
         }
         
         const button = document.getElementById("checkChanges");
-        const sinceDate = document.getElementById("sinceDate").value;
-        
-        if (!sinceDate) {
-            showMessage("Please select a 'Check Since Date' first", "error");
-            return;
-        }
+        const indicator = document.getElementById("changeCheckIndicator");
         
         try {
             app.changeDetection.isRunning = true;
             button.disabled = true;
             button.textContent = "Checking...";
+            indicator.className = "sync-indicator checking";
             
-            showMessage("Checking BLM for changes since " + sinceDate + "...", "info");
+            showMessage("Checking BLM for changes...", "info");
             
             // Check service availability first
             const serviceCheck = await checkBLMServiceStatus();
@@ -660,124 +603,21 @@ require([
                 throw new Error(`BLM service unavailable: ${serviceCheck.error}`);
             }
             
-            // Use Extract Changes if available, otherwise fall back to manual query
+            // Get date range for checking
+            const sinceDate = getSinceDate();
+            
+            // Use Extract Changes if available, otherwise fall back to query comparison
             let changes;
             if (await supportsExtractChanges()) {
                 changes = await extractChangesFromBLM(sinceDate);
             } else {
-                changes = await queryBLMChangesManually(sinceDate);
+                changes = await detectChangesByComparison(sinceDate);
             }
             
-            // Display results
-            displayChangeResults(changes);
+            // Process and display results
+            await processChangeResults(changes);
             
             // Update last check time
-            const now = new Date().toLocaleString();
-            document.getElementById("lastCheck").textContent = now;
-            localStorage.setItem(CONFIG.storage.lastCheck, now);
-            
-            showMessage(`Change detection completed. Found ${(changes.new || 0) + (changes.modified || 0) + (changes.deleted || 0)} total changes.`, "success");
-            
-        } catch (error) {
-            console.error("Change detection error:", error);
-            showMessage("Error during change detection: " + error.message, "error");
-        } finally {
-            app.changeDetection.isRunning = false;
-            button.disabled = false;
-            button.textContent = "Check for Changes Now";
-        }
-    }
-    
-    // Add manual BLM query function for when Extract Changes is not available
-    async function queryBLMChangesManually(sinceDate) {
-        const results = { new: 0, modified: 0, deleted: 0, details: [] };
-        
-        try {
-            // Format date for BLM query
-            const queryDate = new Date(sinceDate).toISOString().split('T')[0];
-            
-            // Query for new claims (Created >= sinceDate)
-            const newClaimsQuery = {
-                where: `Created >= TIMESTAMP '${queryDate} 00:00:00'`,
-                outFields: ["CSE_NR", "CSE_NAME", "Created", "Modified", "CSE_DISP"],
-                returnGeometry: false,
-                f: "json"
-            };
-            
-            const newClaimsResponse = await fetch(CONFIG.blmServices.notClosedFeatures + "/query", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams(newClaimsQuery)
-            });
-            
-            const newClaimsData = await newClaimsResponse.json();
-            if (newClaimsData.features) {
-                results.new = newClaimsData.features.length;
-                results.details.push(...newClaimsData.features.map(f => ({
-                    ...f.attributes,
-                    changeType: "new"
-                })));
-            }
-            
-            // Query for modified claims (Modified >= sinceDate AND Created < sinceDate)
-            const modifiedClaimsQuery = {
-                where: `Modified >= TIMESTAMP '${queryDate} 00:00:00' AND Created < TIMESTAMP '${queryDate} 00:00:00'`,
-                outFields: ["CSE_NR", "CSE_NAME", "Created", "Modified", "CSE_DISP"],
-                returnGeometry: false,
-                f: "json"
-            };
-            
-            const modifiedClaimsResponse = await fetch(CONFIG.blmServices.notClosedFeatures + "/query", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams(modifiedClaimsQuery)
-            });
-            
-            const modifiedClaimsData = await modifiedClaimsResponse.json();
-            if (modifiedClaimsData.features) {
-                results.modified = modifiedClaimsData.features.length;
-                results.details.push(...modifiedClaimsData.features.map(f => ({
-                    ...f.attributes,
-                    changeType: "modified"
-                })));
-            }
-            
-            return results;
-            
-        } catch (error) {
-            console.error("Manual BLM query error:", error);
-            throw new Error("Failed to query BLM services: " + error.message);
-        }
-    }
-    
-    // Add function to display change results
-    function displayChangeResults(changes) {
-        // Update the statistics in the UI
-        const newCount = changes.new || 0;
-        const modifiedCount = changes.modified || 0;
-        const deletedCount = changes.deleted || 0;
-        
-        // Update change counters if they exist
-        const newElement = document.getElementById("newClaimsCount");
-        const modifiedElement = document.getElementById("modifiedClaimsCount");
-        const deletedElement = document.getElementById("deletedClaimsCount");
-        
-        if (newElement) newElement.textContent = newCount;
-        if (modifiedElement) modifiedElement.textContent = modifiedCount;
-        if (deletedElement) deletedElement.textContent = deletedCount;
-        
-        // Update the recent changes stat in dashboard
-        const totalChanges = newCount + modifiedCount + deletedCount;
-        const recentChangesElement = document.getElementById("recentChanges");
-        if (recentChangesElement) {
-            recentChangesElement.textContent = totalChanges;
-        }
-        
-        // Store results for export
-        app.lastChangeResults = changes;
-    }
-    
-    // Update last check time
             app.lastExtractTime = new Date();
             updateLastCheckDisplay();
             localStorage.setItem(CONFIG.storage.lastCheck, app.lastExtractTime.toISOString());
